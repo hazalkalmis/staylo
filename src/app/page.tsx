@@ -9,16 +9,18 @@ export default function Home() {
       {/* NAV */}
       <nav style={{
         borderBottom: '1px solid var(--border)',
-        padding: '0 48px',
+        padding: '0 16px',
         height: '56px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         background: 'var(--surface)',
       }}>
-        <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--ink-strong)' }}>
-          Staylo
-        </span>
+        <img 
+  src="/logo.png" 
+  alt="Staylo" 
+  style={{ height: '48px', width: 'auto', marginLeft: '-4px' }}
+/>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
           <a href="#how" style={{ fontSize: '13px', color: 'var(--muted)', textDecoration: 'none' }}>How it works</a>
           <a href="#score" style={{ fontSize: '13px', color: 'var(--muted)', textDecoration: 'none' }}>The score</a>
@@ -43,7 +45,7 @@ export default function Home() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '100px 24px',
+        padding: '100px 120px',
         textAlign: 'center',
       }}>
         <p style={{ fontSize: '11px', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '24px', textTransform: 'uppercase' }}>
@@ -161,7 +163,7 @@ export default function Home() {
       {/* FOOTER */}
       <footer style={{
         borderTop: '1px solid var(--border)',
-        padding: '24px 48px',
+        padding: '24px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
