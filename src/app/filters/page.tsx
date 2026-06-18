@@ -1,144 +1,182 @@
 'use client'
 
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 
 function FiltersContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  
   const raw = searchParams.get('data')
   const query = searchParams.get('q') || ''
-  
-  let filters: any = null
+
+  let initialFilters: any = {}
   try {
-    filters = raw ? JSON.parse(decodeURIComponent(raw)) : null
-  } catch {
-    filters = null
+    initialFilters = raw ? JSON.parse(decodeURIComponent(raw)) : {}
+  } catch { initialFilters = {} }
+
+  const [city, setCity] = useState(initialFilters.city || '')
+  const [checkIn, setCheckIn] = useState(initialFilters.checkIn || '')
+  const [checkOut, setCheckOut] = useState(initialFilters.checkOut || '')
+  const [guests, setGuests] = useState(initialFilters.guests || 2)
+  const [budgetMax, setBudgetMax] = useState(initialFilters.budget?.max || '')
+  const [weights, setWeights] = useState<Record<string, number>>(initialFilters.weights || {
+    safety: 20, quiet: 20, family: 10, value: 25, walkability: 15, cleanliness: 10
+  })
+
+  function updateWeight(key: string, val: number) {
+  setWeights(prev => ({ ...prev, [key]: val }))
+}
+
+function normalizeWeights() {
+  const total = Object.values(weights).reduce((a, b) => a + b, 0)
+  if (total === 0) return
+  const normalized: Record<string, number> = {}
+  const keys = Object.keys(weights)
+  let remaining = 100
+  keys.forEach((k, i) => {
+    if (i === keys.length - 1) {
+      normalized[k] = remaining
+    } else {
+      normalized[k] = Math.round((weights[k] / total) * 100)
+      remaining -= normalized[k]
+    }
+  })
+  setWeights(normalized)
+}
+
+  function handleFind() {
+    const updated = {
+      ...initialFilters,
+      city,
+      checkIn: checkIn || null,
+      checkOut: checkOut || null,
+      guests: Number(guests),
+      budget: { ...initialFilters.budget, max: budgetMax ? Number(budgetMax) : null },
+      weights,
+    }
+    router.push(`/results?data=${encodeURIComponent(JSON.stringify(updated))}&q=${encodeURIComponent(query)}`)
   }
 
-  if (!filters) {
-    return (
-      <main style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: 'var(--muted)' }}>No filters found. <a href="/search" style={{ color: 'var(--accent-deep)' }}>Go back</a></p>
-      </main>
-    )
-  }
-
-  const weights = filters.weights || {}
-  const totalWeight = Object.values(weights).reduce((a: any, b: any) => a + b, 0)
+  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0)
 
   return (
-    <main style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      {/* NAV */}
-      <nav style={{
-        borderBottom: '1px solid var(--border)',
-        padding: '0 24px',
-        height: '56px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        background: 'var(--surface)',
-      }}>
+    <main style={{ minHeight: '100vh', background: '#FAF7F2', display: 'flex', flexDirection: 'column' }}>
+      <nav style={{ borderBottom: '1px solid #E8E2D6', padding: '0 24px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff' }}>
         <a href="/search"><img src="/logo.png" alt="Staylo" style={{ height: '40px', width: 'auto' }} /></a>
-        <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Step 2 of 3 — Confirm filters</span>
+        <span style={{ fontSize: '13px', color: '#8A8275' }}>Step 2 of 3 — Confirm filters</span>
       </nav>
 
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '48px 24px', width: '100%' }}>
-        
-        {/* QUERY */}
+
         <div style={{ marginBottom: '32px' }}>
-          <p style={{ fontSize: '11px', letterSpacing: '0.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px' }}>You searched for</p>
-          <p style={{ fontSize: '18px', color: 'var(--ink-strong)', fontStyle: 'italic' }}>"{query}"</p>
+          <p style={{ fontSize: '11px', letterSpacing: '0.1em', color: '#8A8275', textTransform: 'uppercase', marginBottom: '8px' }}>You searched for</p>
+          <p style={{ fontSize: '18px', color: '#2F271E', fontStyle: 'italic' }}>"{query}"</p>
         </div>
 
-        {/* FILTERS */}
+        {/* EDITABLE FILTERS */}
         <div style={{ marginBottom: '32px' }}>
-          <p style={{ fontSize: '11px', letterSpacing: '0.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '16px' }}>We understood</p>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
-            {filters.city && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px' }}>
-                <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>CITY</p>
-                <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--ink-strong)' }}>{filters.city}{filters.country ? `, ${filters.country}` : ''}</p>
-              </div>
-            )}
-            {filters.guests && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px' }}>
-                <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>GUESTS</p>
-                <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--ink-strong)' }}>{filters.guests} guests</p>
-              </div>
-            )}
-            {filters.checkIn && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px' }}>
-                <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>DATES</p>
-                <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--ink-strong)' }}>{filters.checkIn} → {filters.checkOut}</p>
-              </div>
-            )}
-            {filters.budget?.max && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px' }}>
-                <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>BUDGET</p>
-                <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--ink-strong)' }}>up to €{filters.budget.max}/night</p>
-              </div>
-            )}
-            {filters.priorities?.length > 0 && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px', gridColumn: 'span 2' }}>
-                <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '8px' }}>PRIORITIES</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {filters.priorities.map((p: string) => (
-                    <span key={p} style={{
-                      background: 'var(--accent-soft)',
-                      color: 'var(--accent-deep)',
-                      padding: '4px 10px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                    }}>{p}</span>
-                  ))}
-                </div>
-              </div>
-            )}
+          <p style={{ fontSize: '11px', letterSpacing: '0.1em', color: '#8A8275', textTransform: 'uppercase', marginBottom: '16px' }}>Edit your search</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+            
+            <div style={{ background: '#fff', border: '1px solid #E8E2D6', padding: '16px' }}>
+              <p style={{ fontSize: '11px', color: '#8A8275', marginBottom: '6px' }}>CITY</p>
+              <input
+                value={city}
+                onChange={e => setCity(e.target.value)}
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: '15px', fontWeight: 500, color: '#2F271E', background: 'transparent' }}
+              />
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #E8E2D6', padding: '16px' }}>
+              <p style={{ fontSize: '11px', color: '#8A8275', marginBottom: '6px' }}>GUESTS</p>
+              <input
+                type="number"
+                value={guests}
+                onChange={e => setGuests(Number(e.target.value))}
+                min={1} max={20}
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: '15px', fontWeight: 500, color: '#2F271E', background: 'transparent' }}
+              />
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #E8E2D6', padding: '16px' }}>
+              <p style={{ fontSize: '11px', color: '#8A8275', marginBottom: '6px' }}>CHECK IN</p>
+              <input
+                type="date"
+                value={checkIn}
+                onChange={e => setCheckIn(e.target.value)}
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: '15px', fontWeight: 500, color: '#2F271E', background: 'transparent' }}
+              />
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #E8E2D6', padding: '16px' }}>
+              <p style={{ fontSize: '11px', color: '#8A8275', marginBottom: '6px' }}>CHECK OUT</p>
+              <input
+                type="date"
+                value={checkOut}
+                onChange={e => setCheckOut(e.target.value)}
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: '15px', fontWeight: 500, color: '#2F271E', background: 'transparent' }}
+              />
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #E8E2D6', padding: '16px', gridColumn: 'span 2' }}>
+              <p style={{ fontSize: '11px', color: '#8A8275', marginBottom: '6px' }}>MAX BUDGET (€/night)</p>
+              <input
+                type="number"
+                value={budgetMax}
+                onChange={e => setBudgetMax(e.target.value)}
+                placeholder="No limit"
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: '15px', fontWeight: 500, color: '#2F271E', background: 'transparent' }}
+              />
+            </div>
           </div>
         </div>
 
         {/* WEIGHTS */}
         <div style={{ marginBottom: '40px' }}>
-          <p style={{ fontSize: '11px', letterSpacing: '0.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '16px' }}>How we'll rank hotels</p>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '24px' }}>
-            {Object.entries(weights).map(([key, val]: [string, any]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px' }}>
-                <span style={{ width: '100px', fontSize: '13px', color: 'var(--text)', textTransform: 'capitalize' }}>{key}</span>
-                <div style={{ flex: 1, height: '4px', background: 'var(--border)', position: 'relative' }}>
-                  <div style={{ position: 'absolute', inset: '0 auto 0 0', background: 'var(--accent-deep)', width: `${val}%` }} />
-                </div>
-                <span style={{ fontSize: '12px', color: 'var(--muted)', width: '32px', textAlign: 'right' }}>{val}%</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <p style={{ fontSize: '11px', letterSpacing: '0.1em', color: '#8A8275', textTransform: 'uppercase' }}>How we'll rank hotels</p>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+  <span style={{ 
+    fontSize: '13px', 
+    fontWeight: totalWeight !== 100 ? 700 : 400,
+    color: totalWeight === 100 ? '#4F9E6A' : '#C5604E' 
+  }}>
+    Total: {totalWeight}%
+  </span>
+  {totalWeight !== 100 && (
+    <button onClick={normalizeWeights} style={{
+      fontSize: '11px', color: '#5A8C7A', background: 'none', border: '1px solid #5A8C7A',
+      padding: '2px 8px', cursor: 'pointer'
+    }}>
+      Normalize to 100%
+    </button>
+  )}
+</div>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #E8E2D6', padding: '24px' }}>
+            {Object.entries(weights).map(([key, val]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                <span style={{ width: '100px', fontSize: '13px', color: '#4A3F32', textTransform: 'capitalize' }}>{key}</span>
+                <input
+                  type="range"
+                  min={0} max={100}
+                  value={val}
+                  onChange={e => updateWeight(key, Number(e.target.value))}
+                  style={{ flex: 1, accentColor: '#5A8C7A' }}
+                />
+                <span style={{ fontSize: '12px', color: '#8A8275', width: '32px', textAlign: 'right' }}>{val}%</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ACTIONS */}
         <div style={{ display: 'flex', gap: '12px' }}>
-          <a href="/search" style={{
-            padding: '12px 24px',
-            border: '1px solid var(--border)',
-            fontSize: '14px',
-            color: 'var(--text)',
-            textDecoration: 'none',
-          }}>
+          <a href="/search" style={{ padding: '12px 24px', border: '1px solid #E8E2D6', fontSize: '14px', color: '#4A3F32', textDecoration: 'none' }}>
             ← Edit search
           </a>
           <button
-            onClick={() => router.push(`/results?data=${encodeURIComponent(raw || '')}&q=${encodeURIComponent(query)}`)}
-            style={{
-              flex: 1,
-              padding: '12px 24px',
-              background: 'var(--ink-strong)',
-              color: 'var(--bg)',
-              border: 'none',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
+            onClick={handleFind}
+            style={{ flex: 1, padding: '12px 24px', background: '#2F271E', color: '#FAF7F2', border: 'none', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}
           >
             Find hotels →
           </button>
@@ -150,7 +188,7 @@ function FiltersContent() {
 
 export default function FiltersPage() {
   return (
-    <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg)' }} />}>
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#FAF7F2' }} />}>
       <FiltersContent />
     </Suspense>
   )
