@@ -70,7 +70,15 @@ function Page() {
               {/* BODY */}
               <div style={{ padding: '26px 30px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 5 }}>
-                  <span style={{ fontSize: 13, color: '#2F271E', border: '1px solid #C5B89A', padding: '3px 9px', fontFamily: 'monospace', fontWeight: 600, background: '#F5F0E8'}}>#{i + 1}</span>
+                <span style={{
+  fontSize: 13,
+  fontFamily: 'monospace',
+  fontWeight: 600,
+  padding: '3px 9px',
+  color: i === 0 ? '#3A2C00' : '#2F271E',
+  background: i === 0 ? '#E8B14F' : '#F5F0E8',
+  border: i === 0 ? '1px solid #D4A23A' : '1px solid #C5B89A',
+}}>#{i + 1}</span>
                   <span style={{ fontSize: 23, fontWeight: 500, letterSpacing: '-0.02em', color: '#2F271E' }}>{h.name}</span>
                 </div>
                 <div style={{ fontSize: 12, color: '#8A8275', marginBottom: 14 }}>{h.area} · {h.reviews.toLocaleString()} reviews</div>
