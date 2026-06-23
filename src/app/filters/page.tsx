@@ -1,221 +1,632 @@
-'use client'
+// @ts-nocheck
+"use client";
 
-import { useSearchParams, useRouter } from 'next/navigation'
-import { Suspense, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useEffect } from "react";
 
-const WEIGHT_LABELS: Record<string, string> = {
-  safety: 'Safety',
-  quiet: 'Quiet',
-  family: 'Family',
-  value: 'Value',
-  walk: 'Walkability',
-  clean: 'Cleanliness',
-}
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
 
-function FiltersContent() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const raw = searchParams.get('data')
-  const query = searchParams.get('q') || ''
-
-  let initialFilters: any = {}
-  try {
-    initialFilters = raw ? JSON.parse(decodeURIComponent(raw)) : {}
-  } catch {
-    initialFilters = {}
+  :root{
+    --ink:#03045e; --body:#33506a; --muted:#6f8a9c; --faint:#9fb4c2;
+    --border:#e4edf3; --surface:#ffffff; --surface-2:#f3f9fc;
+    --ocean:#0077b6; --sky:#90e0ef; --pale:#caf0f8; --cyan:#00b4d8;
   }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Geist',system-ui,sans-serif;background:#fff;color:var(--body);
+       line-height:1.55;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 40px;position:relative;z-index:3;}
+  .serif{font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;}
 
-  const [city, setCity] = useState(initialFilters.city || '')
-  const [checkIn, setCheckIn] = useState(initialFilters.checkIn || '')
-  const [checkOut, setCheckOut] = useState(initialFilters.checkOut || '')
-  const [guests, setGuests] = useState(initialFilters.guests || 2)
-  const [budgetMin, setBudgetMin] = useState(initialFilters.budget?.min ?? '')
-  const [budgetMax, setBudgetMax] = useState(initialFilters.budget?.max ?? '')
-  const [weights, setWeights] = useState<Record<string, number>>(
-    initialFilters.weights || { safety: 20, quiet: 20, family: 10, value: 25, walk: 15, clean: 10 }
-  )
+  /* logo */
+  .logo{display:inline-flex;align-items:center;}
+  .logo .w{font-weight:700;letter-spacing:-0.05em;color:var(--ink);font-size:30px;}
+  .logo .sq{display:flex;align-items:center;justify-content:center;transform:rotate(-4deg);
+            position:relative;overflow:hidden;border-radius:3px;margin-left:0.07em;width:32px;height:32px;}
+  .logo .sq .h{position:absolute;top:0;height:100%;width:50%;}
+  .logo .sq .h.l{left:0;background:var(--sky);}
+  .logo .sq .h.r{right:0;background:var(--ink);}
+  .logo .o{position:absolute;z-index:2;font-weight:700;letter-spacing:-0.05em;line-height:1;
+           left:50%;top:50%;transform:translate(-50%,-53%);font-size:25px;}
+  .logo .o.oL{color:#fff;clip-path:inset(0 50% 0 0);}
+  .logo .o.oR{color:#fff;clip-path:inset(0 0 0 50%);}
 
-  function updateWeight(key: string, val: number) {
-    setWeights(prev => ({ ...prev, [key]: val }))
-  }
+  /* nav (logo hard-left, actions hard-right) */
+  nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,0.72);
+      backdrop-filter:blur(12px);border-bottom:1px solid rgba(228,237,243,0.8);}
+  .nav-row{max-width:none;margin:0;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;}
+  .nav-links{display:flex;gap:30px;font-size:15px;font-weight:500;color:var(--muted);}
+  .nav-links a:hover{color:var(--ink);}
+  .nav-right{display:flex;align-items:center;gap:20px;}
+  .login{font-size:15px;font-weight:600;color:var(--ink);}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--ink);
+       background:var(--ink);color:#fff;padding:12px 22px;border-radius:11px;
+       font:600 14.5px 'Geist',sans-serif;cursor:pointer;transition:background 120ms;}
+  .btn:hover{background:#06075f;}
+  .btn--ghost{background:rgba(255,255,255,0.7);color:var(--ink);border-color:var(--ink);}
+  .btn--ghost:hover{background:#fff;}
+  .btn--lg{padding:15px 26px;font-size:16px;border-radius:12px;}
 
-  function normalizeWeights() {
-    const total = Object.values(weights).reduce((a, b) => a + b, 0)
-    if (total === 0) return
-    const normalized: Record<string, number> = {}
-    const keys = Object.keys(weights)
-    let remaining = 100
-    keys.forEach((k, i) => {
-      if (i === keys.length - 1) {
-        normalized[k] = remaining
-      } else {
-        normalized[k] = Math.round((weights[k] / total) * 100)
-        remaining -= normalized[k]
-      }
-    })
-    setWeights(normalized)
-  }
+  /* sky + clouds */
+  .skyband{position:relative;overflow:hidden;
+    background:linear-gradient(180deg,#cfe9f6 0%,#dcf1fb 46%,#eef9fd 78%,#ffffff 100%);}
+  .white{position:relative;overflow:hidden;background:#fff;}
+  .cloud-layer{position:absolute;inset:0;pointer-events:none;z-index:1;}
+  .cloud{position:absolute;will-change:transform;}
+  .cloud svg{display:block;}
+  @keyframes drift{from{transform:translateX(-20px);}to{transform:translateX(20px);}}
 
-  function handleFind() {
-    const updated = {
-      ...initialFilters,
-      city,
-      checkIn: checkIn || null,
-      checkOut: checkOut || null,
-      guests: Number(guests),
-      budget: {
-        ...initialFilters.budget,
-        min: budgetMin ? Number(budgetMin) : null,
-        max: budgetMax ? Number(budgetMax) : null,
-      },
-      weights,
-    }
-    router.push(`/results?data=${encodeURIComponent(JSON.stringify(updated))}&q=${encodeURIComponent(query)}`)
-  }
+  /* header */
+  header.head{position:relative;z-index:3;padding:54px 40px 30px;}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:700;
+           letter-spacing:0.14em;text-transform:uppercase;color:var(--ocean);margin-bottom:18px;}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);}
+  h1{font-size:clamp(34px,4.6vw,52px);font-weight:700;letter-spacing:-0.035em;line-height:1.04;
+     margin:0;color:var(--ink);max-width:820px;text-wrap:balance;}
+  .stamp{display:inline-block;background:var(--ocean);color:#fff;padding:0 14px 5px;border-radius:6px;line-height:1.04;}
+  .sub{font-size:17px;color:var(--body);max-width:600px;margin:18px 0 0;}
 
-  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0)
-  const totalOk = totalWeight === 100
+  /* card */
+  .card{position:relative;z-index:3;background:#fff;border:1px solid var(--border);border-radius:18px;
+        box-shadow:0 40px 90px -54px rgba(3,4,94,0.4);margin:34px 0 0;overflow:visible;}
+  .card-pad{padding:30px 34px;}
+  .card + .card{margin-top:18px;}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:4px;}
+  .card-head h2{font-size:13px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0;}
+  .card-head .head-right{display:flex;align-items:center;gap:10px;}
+  .pill{font-size:12px;font-weight:600;color:var(--ocean);background:var(--surface-2);border:1px solid var(--border);
+        border-radius:999px;padding:5px 12px;transition:color 120ms,background 120ms,border-color 120ms;}
+  .pill.warn{color:#d94030;background:#fdecea;border-color:#f5c6c0;}
 
-  function renderQuery() {
-    if (!query) return <span style={{ color: '#B8B0A2' }}>your search</span>
-    if (!city) return query
-    const idx = query.toLowerCase().indexOf(String(city).toLowerCase())
-    if (idx === -1) return query
-    const before = query.slice(0, idx)
-    const match = query.slice(idx, idx + String(city).length)
-    const after = query.slice(idx + String(city).length)
-    return (
-      <>
-        {before}
-        <span style={{ background: '#5A8C7A', color: '#fff', padding: '0 8px', transform: 'rotate(-1deg)', display: 'inline-block' }}>{match}</span>
-        {after}
-      </>
-    )
-  }
+  /* fix-to-100 button */
+  .fixbtn{display:none;align-items:center;gap:6px;font:600 12px 'Geist',sans-serif;color:#fff;
+          background:var(--ocean);border:1px solid var(--ocean);border-radius:999px;padding:6px 13px;cursor:pointer;
+          transition:background 120ms;}
+  .fixbtn:hover{background:#0369a1;}
+  .fixbtn.show{display:inline-flex;}
 
-  const lblStyle: CSSProperties = {
-    fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8A8275', fontWeight: 500,
-  }
-  const inputStyle: CSSProperties = {
-    width: '100%', border: 'none', outline: 'none', fontSize: 18, color: '#2F271E',
-    background: 'transparent', marginTop: 8, fontFamily: 'inherit',
-  }
-  const cellStyle = (i: number): CSSProperties => ({
-    padding: '16px 20px',
-    borderRight: i % 2 === 0 ? '1px solid #E8E2D6' : 'none',
-    borderBottom: i < 4 ? '1px solid #E8E2D6' : 'none',
-  })
+  /* fields grid */
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);
+          border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:16px;}
+  .field{background:#fff;padding:15px 18px;}
+  .field label{display:block;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:7px;}
+  .field input{width:100%;border:none;outline:none;background:transparent;font:500 16px 'Geist',sans-serif;color:var(--ink);letter-spacing:-0.01em;}
+  .field input::placeholder{color:var(--faint);font-weight:400;}
 
-  return (
-    <main style={{ minHeight: '100vh', background: '#EFE9DD' }}>
-      <style>{`
-        .w-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; outline: none; cursor: pointer; margin: 0; }
-        .w-slider::-webkit-slider-runnable-track { height: 6px; background: transparent; }
-        .w-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -5px; border-radius: 50%; background: #fff; border: 2px solid #5A8C7A; box-shadow: 0 1px 3px rgba(0,0,0,0.12); cursor: pointer; }
-        .w-slider::-moz-range-track { height: 6px; background: transparent; }
-        .w-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 2px solid #5A8C7A; box-shadow: 0 1px 3px rgba(0,0,0,0.12); cursor: pointer; }
-        .btn-go-x:hover { background: #4C7A6A; }
-        .btn-ghost-x:hover { background: #FBF8F2; }
-      `}</style>
+  /* tag fields (Vibe / Must-have) — full width, searchable chips */
+  .xfields{display:flex;flex-direction:column;gap:1px;background:var(--border);
+           border:1px solid var(--border);border-radius:12px;margin-top:14px;}
+  .xfield{background:#fff;padding:15px 18px;position:relative;}
+  .xfield:first-child{border-radius:12px 12px 0 0;}
+  .xfield:last-child{border-radius:0 0 12px 12px;}
+  .xfield > label{display:block;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px;}
+  .tagrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .tag{display:inline-flex;align-items:center;gap:5px;font-size:13.5px;font-weight:500;color:var(--ink);
+       background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 7px 5px 13px;}
+  .tag .x{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;
+          cursor:pointer;color:var(--muted);font-size:13px;line-height:1;transition:background 120ms,color 120ms;}
+  .tag .x:hover{background:#dfeaf1;color:var(--ink);}
+  .addtag{position:relative;}
+  .addtag-btn{display:inline-flex;align-items:center;gap:5px;font:500 13px 'Geist',sans-serif;color:var(--ocean);
+              background:#fff;border:1px dashed #b9d2dd;border-radius:999px;padding:5px 13px 5px 11px;cursor:pointer;
+              transition:border-color 120ms,background 120ms;}
+  .addtag-btn:hover{border-color:var(--ocean);background:var(--surface-2);}
+  .addtag-btn svg{width:13px;height:13px;}
+  .tagmenu{display:none;position:absolute;top:calc(100% + 7px);left:0;width:286px;background:#fff;
+           border:1px solid var(--border);border-radius:13px;box-shadow:0 26px 64px -30px rgba(3,4,94,0.5);
+           z-index:40;padding:8px;}
+  .tagmenu.open{display:block;}
+  .tagmenu .srch{width:100%;border:1px solid var(--border);outline:none;border-radius:9px;background:var(--surface-2);
+                 font:500 13.5px 'Geist',sans-serif;color:var(--ink);padding:8px 11px;margin-bottom:6px;}
+  .tagmenu .srch::placeholder{color:var(--faint);font-weight:400;}
+  .tagmenu .srch:focus{border-color:var(--ocean);background:#fff;}
+  .tagmenu .opts{max-height:208px;overflow:auto;}
+  .tagmenu .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:8px;
+                font-size:13.5px;color:var(--ink);cursor:pointer;}
+  .tagmenu .opt:hover,.tagmenu .opt.active{background:var(--surface-2);}
+  .tagmenu .opt .ck{color:var(--ocean);opacity:0;}
+  .tagmenu .opt.sel .ck{opacity:1;}
+  .tagmenu .opt.sel{color:var(--muted);}
+  .tagmenu .opt.add{color:var(--ocean);font-weight:500;}
+  .tagmenu .empty{padding:9px 10px;font-size:13px;color:var(--muted);}
 
-      <nav style={{ borderBottom: '1px solid #E8E2D6', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff' }}>
-        <a href="/search"><img src="/logo.png" alt="Staylo" style={{ height: 40, width: 'auto' }} /></a>
-        <span style={{ fontSize: 13, color: '#8A8275' }}>Step 2 of 3 — Confirm filters</span>
-      </nav>
+  /* weights */
+  .wlist{margin-top:18px;display:flex;flex-direction:column;gap:18px;}
+  .wrow{display:grid;grid-template-columns:150px 1fr 48px;align-items:center;gap:16px;}
+  .wrow .wl{font-size:14px;font-weight:500;color:var(--ink);}
+  .wrow .wl small{display:block;font-size:11px;font-weight:400;color:var(--faint);letter-spacing:0;margin-top:1px;}
+  .wrow .wv{font-size:14px;font-weight:600;color:var(--ink);font-family:ui-monospace,monospace;text-align:right;}
+  .slider{position:relative;height:22px;display:flex;align-items:center;}
+  .slider .trk{position:absolute;left:0;right:0;height:6px;border-radius:3px;background:#e1ecf3;}
+  .slider .fill{position:absolute;left:0;height:6px;border-radius:3px;background:var(--ocean);}
+  .slider input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;margin:0;position:relative;z-index:2;cursor:ew-resize;}
+  .slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--ocean);box-shadow:0 2px 6px rgba(3,4,94,0.22);cursor:ew-resize;}
+  .slider input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--ocean);box-shadow:0 2px 6px rgba(3,4,94,0.22);cursor:ew-resize;}
+  .wfoot{margin-top:18px;display:flex;justify-content:space-between;align-items:center;
+         padding-top:16px;border-top:1px solid var(--border);}
+  .wfoot .tip{font-size:12.5px;color:var(--muted);}
+  .actions{display:flex;gap:10px;}
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '48px 28px 80px' }}>
-        <div style={{ border: '1px solid #E8E2D6', overflow: 'hidden', background: '#fff' }}>
+  /* extra flat sky before the sea photo */
+  .sky-extend{height:120px;background:linear-gradient(180deg,#eef9fd 0%,#e9f6fc 100%);position:relative;z-index:2;}
+  /* steps */
+  .steps-sec{position:relative;overflow:hidden;padding:36px 0 90px;
+    background:url("/staylo-confirm-bg.png") center top / cover no-repeat;}
+  .steps-sec::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background:linear-gradient(180deg, rgba(232,243,250,0.62) 0%, rgba(240,247,252,0.5) 22%, rgba(255,255,255,0.74) 58%, rgba(255,255,255,0.78) 100%);}
+  .steps-sec .wrap{position:relative;z-index:3;}
+  /* steps — journey (gradient ribbon, 4 nodes) */
+  .jr{position:relative;margin-top:8px;height:392px;z-index:3;}
+  .jr svg.path{position:absolute;inset:0;width:100%;height:100%;z-index:1;}
+  .pt{position:absolute;width:220px;transform:translateX(-50%);text-align:center;z-index:2;}
+  .pt h3{margin:0 0 6px;font-size:17px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;}
+  .pt p{margin:0;font-size:13px;color:var(--muted);line-height:1.5;}
+  .pt .circ{width:88px;height:88px;border-radius:50%;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;
+            position:relative;color:#fff;box-shadow:0 18px 36px -14px rgba(3,69,122,0.7);}
+  .pt .circ svg{width:40px;height:40px;}
+  .pt .circ.done{box-shadow:0 0 0 4px #fff, 0 0 0 8px var(--cyan), 0 18px 36px -14px rgba(3,69,122,0.7);}
+  .pt .circ.done .n,.pt .circ.past .n{background:var(--cyan);color:#fff;border-color:#fff;}
+  .pt .circ.done .n svg,.pt .circ.past .n svg{width:18px;height:18px;}
+  .nowtag{display:inline-block;vertical-align:middle;margin-left:8px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;
+          text-transform:uppercase;color:#fff;background:var(--cyan);border-radius:999px;padding:3px 9px;white-space:nowrap;}
+  .pt:nth-child(2) .circ{background:linear-gradient(150deg,#48cae4,#0096c7);}
+  .pt:nth-child(3) .circ{background:linear-gradient(150deg,#0096c7,#0077b6);}
+  .pt:nth-child(4) .circ{background:linear-gradient(150deg,#0077b6,#03457a);}
+  .pt:nth-child(5) .circ{background:linear-gradient(150deg,#03457a,#03045e);}
+  .pt .circ .n{position:absolute;bottom:-6px;right:-6px;width:30px;height:30px;border-radius:50%;background:#fff;color:var(--ocean);
+               font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 8px rgba(3,4,94,0.2);}
 
-          <div style={{ padding: '40px 56px' }}>
-            <div style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#8A8275', fontWeight: 500 }}>You searched for</div>
-            <div style={{ fontSize: 30, fontWeight: 500, color: '#2F271E', margin: '8px 0 0', letterSpacing: '-0.025em' }}>
-              {renderQuery()}
-            </div>
+  /* footer */
+  footer{padding:40px 0;border-top:1px solid var(--border);font-size:13px;color:var(--muted);background:#fff;}
+  .footer-row{max-width:1160px;margin:0 auto;padding:0 40px;display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;}
 
-            <div style={{ marginTop: 32, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#8A8275', fontWeight: 500 }}>Edit your search</div>
+  @media(max-width:880px){.fields{grid-template-columns:1fr;}.nav-links{display:none;}.wrow{grid-template-columns:120px 1fr 42px;}
+    .jr{height:auto;position:static;}.jr svg.path{display:none;}
+    .tagmenu{width:min(286px,calc(100vw - 80px));}
+    .pt{position:static!important;width:auto;transform:none;margin:0 auto 26px;max-width:300px;}}
+`;
 
-            <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #E8E2D6' }}>
-              <div style={cellStyle(0)}>
-                <div style={lblStyle}>City</div>
-                <input value={city} onChange={e => setCity(e.target.value)} style={inputStyle} />
-              </div>
-              <div style={cellStyle(1)}>
-                <div style={lblStyle}>Guests</div>
-                <input type="number" value={guests} onChange={e => setGuests(Number(e.target.value))} min={1} max={20} style={inputStyle} />
-              </div>
-              <div style={cellStyle(2)}>
-                <div style={lblStyle}>Check in</div>
-                <input type="date" value={checkIn} onChange={e => setCheckIn(e.target.value)} style={inputStyle} />
-              </div>
-              <div style={cellStyle(3)}>
-                <div style={lblStyle}>Check out</div>
-                <input type="date" value={checkOut} onChange={e => setCheckOut(e.target.value)} style={inputStyle} />
-              </div>
-              <div style={cellStyle(4)}>
-                <div style={lblStyle}>Min budget (€/night)</div>
-                <input type="number" value={budgetMin} onChange={e => setBudgetMin(e.target.value)} placeholder="No min" style={inputStyle} />
-              </div>
-              <div style={cellStyle(5)}>
-                <div style={lblStyle}>Max budget (€/night)</div>
-                <input type="number" value={budgetMax} onChange={e => setBudgetMax(e.target.value)} placeholder="No max" style={inputStyle} />
-              </div>
-            </div>
+const BODY = `
+<!-- ===== NAV ===== -->
+<nav>
+  <div class="nav-row">
+    <a href="/landing.html" class="logo"><span class="w">stayl</span><span class="sq"><span class="h l"></span><span class="h r"></span><span class="o oL">o</span><span class="o oR">o</span></span></a>
+    <div class="nav-links">
+      <a href="/landing.html#how">How it works</a>
+      <a href="/landing.html#score">The score</a>
+      <a href="/landing.html#faq">FAQ</a>
+    </div>
+    <div class="nav-right">
+      <a href="#" class="login">Log in</a>
+      <a href="#" class="btn">Saved</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== HEADER (sky) + CARD ===== -->
+<div class="skyband">
+  <div class="cloud-layer" data-zone="head"></div>
+  <header class="head wrap">
+    <div class="eyebrow"><span class="dot"></span>Step 2 of 4 · Confirm your search</div>
+    <h1>Quiet boutique stay in <span style="white-space:nowrap"><span class="stamp">Lisbon</span>,</span> walkable, under €180.</h1>
+    <p class="sub">Here's what we understood. Correct anything, set what matters most, then we'll read and score every matching hotel.</p>
+  </header>
+
+  <div class="wrap">
+    <!-- criteria -->
+    <section class="card">
+      <div class="card-pad">
+        <div class="card-head">
+          <h2>Your search</h2>
+          <div class="head-right"><span class="pill">8 criteria · AI-extracted</span></div>
+        </div>
+        <div class="fields">
+          <div class="field"><label>City</label><input value="Lisbon, Portugal"></div>
+          <div class="field"><label>Guests</label><input value="2 adults"></div>
+          <div class="field"><label>Check in</label><input value="12.09.2026" placeholder="dd.mm.yyyy"></div>
+          <div class="field"><label>Check out</label><input value="16.09.2026" placeholder="dd.mm.yyyy"></div>
+          <div class="field"><label>Min budget (€/night)</label><input value="90"></div>
+          <div class="field"><label>Max budget (€/night)</label><input value="180"></div>
+        </div>
+        <div class="xfields">
+          <div class="xfield" data-tagfield="vibe">
+            <label>Vibe <span style="color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">— optional</span></label>
+            <div class="tagrow" data-tagrow></div>
           </div>
-
-          <div style={{ background: '#D9EAE2', padding: '36px 56px', borderTop: '1px solid #E8E2D6' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#5A8C7A', fontWeight: 500 }}>How we'll rank hotels</div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button onClick={normalizeWeights} style={{ fontSize: 11, color: totalOk ? '#B8B0A2' : '#5A8C7A', background: '#fff', border: `1px solid ${totalOk ? '#D9D0BD' : '#5A8C7A'}`, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Adjust to 100%
-                </button>
-                <div style={{ fontSize: 12, color: '#fff', background: totalOk ? '#5A8C7A' : '#C5604E', padding: '4px 10px', fontFamily: 'ui-monospace, monospace' }}>
-                  Total {totalWeight}%
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              {Object.entries(weights).map(([key, val]) => (
-                <div key={key} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 52px', alignItems: 'center', gap: 18, padding: '9px 0' }}>
-                  <span style={{ fontSize: 14, color: '#4A3F32' }}>{WEIGHT_LABELS[key] || key}</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={val}
-                    onChange={e => updateWeight(key, Number(e.target.value))}
-                    className="w-slider"
-                    style={{
-                      background: `linear-gradient(to right, #5A8C7A 0%, #5A8C7A ${val}%, rgba(90,140,122,0.25) ${val}%, rgba(90,140,122,0.25) 100%)`,
-                    }}
-                  />
-                  <span style={{ fontSize: 14, fontFamily: 'ui-monospace, monospace', color: '#2F271E', textAlign: 'right' }}>{val}%</span>
-                </div>
-              ))}
-            </div>
+          <div class="xfield" data-tagfield="must">
+            <label>Must-have <span style="color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">— optional</span></label>
+            <div class="tagrow" data-tagrow></div>
           </div>
-
-          <div style={{ padding: '22px 56px', display: 'flex', gap: 14, borderTop: '1px solid #E8E2D6' }}>
-            <a href="/search" className="btn-ghost-x" style={{ background: 'transparent', border: '1px solid #D9D0BD', padding: '14px 22px', fontWeight: 500, fontSize: 14, color: '#4A3F32', textDecoration: 'none' }}>
-              ← Edit search
-            </a>
-            <button onClick={handleFind} className="btn-go-x" style={{ flex: 1, background: '#5A8C7A', color: '#fff', border: 'none', padding: 14, fontWeight: 500, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Find hotels →
-            </button>
-          </div>
-
         </div>
       </div>
-    </main>
-  )
-}
+    </section>
 
-export default function FiltersPage() {
+    <!-- weights -->
+    <section class="card">
+      <div class="card-pad">
+        <div class="card-head">
+          <h2>How we'll rank hotels</h2>
+          <div class="head-right">
+            <span class="pill" id="total">Total 100%</span>
+            <button type="button" class="fixbtn" id="fix100">Adjust to 100%</button>
+          </div>
+        </div>
+        <div class="wlist" id="weights"></div>
+        <div class="wfoot">
+          <span class="tip">Drag any slider — each moves on its own.&nbsp;</span>
+          <div class="actions">
+            <a href="/" class="btn btn--ghost">← Edit search</a>
+            <a href="/results" class="btn">Find hotels →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="sky-extend"></div>
+</div>
+
+<!-- ===== 4-STEP EXPLAINER ===== -->
+<section class="steps-sec">
+  <div class="wrap">
+    <div class="jr">
+      <svg class="path" viewBox="0 0 1000 392" preserveAspectRatio="none">
+        <defs><linearGradient id="rib" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#90e0ef"></stop><stop offset="0.4" stop-color="#00b4d8"></stop>
+          <stop offset="0.7" stop-color="#0077b6"></stop><stop offset="1" stop-color="#03457a"></stop>
+        </linearGradient></defs>
+        <path d="M125 278 C 250 278 250 74 375 74 S 500 278 625 278 S 750 74 875 74" fill="none" stroke="url(#rib)" stroke-width="6" stroke-linecap="round" opacity="0.92"></path>
+      </svg>
+      <div class="pt" style="left:12.5%;top:234px;">
+        <div class="circ past"><span class="n"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"></path><path d="M8 10h8M8 13.5h5"></path></svg></div>
+        <h3>Describe the trip</h3><p>Type it like you'd tell a friend — plain language.</p>
+      </div>
+      <div class="pt" style="left:37.5%;top:30px;">
+        <div class="circ done"><span class="n"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"></path><path d="M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"></path></svg></div>
+        <h3>Confirm the criteria <span class="nowtag">You're here</span></h3><p>Location, dates, budget &amp; vibe — fix anything.</p>
+      </div>
+      <div class="pt" style="left:62.5%;top:234px;">
+        <div class="circ"><span class="n">3</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v3.5a5 5 0 0 1-10 0V4z"></path><path d="M7 6H4.2v.8a3 3 0 0 0 3 3M17 6h2.8v.8a3 3 0 0 1-3 3"></path><path d="M12 12.5V16M9 20h6M10 16.5h4"></path></svg></div>
+        <h3>Get one ranked answer</h3><p>Every hotel read, scored and ranked for you.</p>
+      </div>
+      <div class="pt" style="left:87.5%;top:30px;">
+        <div class="circ"><span class="n">4</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"></rect><path d="M3 9h18M8 2.5v4M16 2.5v4"></path><path d="M9 14.5l2 2 4-4"></path></svg></div>
+        <h3>Book on Booking.com</h3><p>Same price — booked securely through Booking.com.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <div class="footer-row">
+    <a href="/landing.html" class="logo"><span class="w" style="font-size:24px">stayl</span><span class="sq" style="width:26px;height:26px"><span class="h l"></span><span class="h r"></span><span class="o oL" style="font-size:20px">o</span><span class="o oR" style="font-size:20px">o</span></span></a>
+    <span style="font-size:11.5px;">© 2026 Staylo · Powered by Booking.com inventory</span>
+  </div>
+</footer>
+`;
+
+export default function ConfirmPage() {
+  useEffect(() => {
+    /* eslint-disable */
+
+    /* ---------- Vibe / Must-have tag fields (searchable, optional) ---------- */
+    // selected: comes from the previous search. If the search didn't mention
+    // any vibe / must-have, start empty — the user can add their own.
+    const TAGSETS = {
+      vibe: {
+        selected: ["Quiet & calm", "Boutique & design-led"],
+        options: ["Quiet & calm","Lively & social","Boutique & design-led","Romantic",
+                  "Family-friendly","Local & authentic","Luxury","Budget-friendly",
+                  "Trendy & modern","Historic & charming","Adults-only","Nature & views"],
+        placeholder: "Search vibes…",
+      },
+      must: {
+        selected: ["Walk to centre", "Breakfast included"],
+        options: ["Breakfast included","Free WiFi","Walk to centre","Air conditioning","Pool",
+                  "Pet-friendly","Family rooms","Free parking","Airport shuttle","Gym / fitness",
+                  "Kitchen / kitchenette","24-hour reception","Non-smoking","Spa","Balcony"],
+        placeholder: "Search must-haves…",
+      },
+    };
+
+    const plusSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+    const ckSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+    const tagCleanups = [];
+
+    document.querySelectorAll('[data-tagfield]').forEach(field => {
+      const key = field.getAttribute('data-tagfield');
+      const set = TAGSETS[key];
+      if (!set) return;
+      const row = field.querySelector('[data-tagrow]');
+      let menuEl = null;
+      let activeIdx = -1;
+
+      function closeMenu() {
+        if (menuEl) { menuEl.remove(); menuEl = null; activeIdx = -1; }
+      }
+
+      function add(value) {
+        const v = (value || "").trim();
+        if (!v) return;
+        if (!set.selected.some(s => s.toLowerCase() === v.toLowerCase())) set.selected.push(v);
+        const keep = menuEl ? (menuEl.querySelector('.srch') || {}).value || "" : "";
+        render();          // render() closes any open menu
+        openMenu(keep);    // reopen for multi-add, preserving the typed filter
+      }
+      function remove(value) {
+        set.selected = set.selected.filter(s => s !== value);
+        render();
+      }
+
+      function buildMenu(filter) {
+        const f = (filter || "").trim().toLowerCase();
+        const matches = set.options.filter(o => o.toLowerCase().includes(f));
+        let html = '<input class="srch" placeholder="' + set.placeholder + '" />';
+        html += '<div class="opts">';
+        if (matches.length) {
+          matches.forEach((o, i) => {
+            const sel = set.selected.some(s => s.toLowerCase() === o.toLowerCase());
+            html += '<div class="opt' + (sel ? ' sel' : '') + (i === activeIdx ? ' active' : '') +
+                    '" data-opt="' + o.replace(/"/g, '&quot;') + '">' +
+                    '<span>' + o + '</span><span class="ck">' + ckSvg + '</span></div>';
+          });
+        }
+        const exact = set.options.some(o => o.toLowerCase() === f) ||
+                      set.selected.some(s => s.toLowerCase() === f);
+        if (f && !exact) {
+          html += '<div class="opt add" data-add="' + f.replace(/"/g, '&quot;') + '">+ Add “' + filter.trim() + '”</div>';
+        }
+        if (!matches.length && !f) html += '<div class="empty">No more options</div>';
+        html += '</div>';
+        return html;
+      }
+
+      function openMenu(keepVal) {
+        const keep = typeof keepVal === 'string'
+          ? keepVal
+          : (menuEl ? (menuEl.querySelector('.srch') || {}).value || "" : "");
+        closeMenu();
+        const btn = row.querySelector('.addtag');
+        if (!btn) return;
+        menuEl = document.createElement('div');
+        menuEl.className = 'tagmenu open';
+        menuEl.innerHTML = buildMenu(keep);
+        btn.appendChild(menuEl);
+        const srch = menuEl.querySelector('.srch');
+        srch.value = keep;
+        srch.focus();
+        srch.addEventListener('input', () => { activeIdx = -1; refreshOpts(srch.value); });
+        srch.addEventListener('keydown', (e) => {
+          const opts = Array.from(menuEl.querySelectorAll('.opt'));
+          if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(opts.length - 1, activeIdx + 1); paintActive(opts); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(0, activeIdx - 1); paintActive(opts); }
+          else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeIdx >= 0 && opts[activeIdx]) selectOpt(opts[activeIdx]);
+            else add(srch.value);
+          } else if (e.key === 'Escape') { closeMenu(); }
+        });
+        wireOpts();
+      }
+
+      function refreshOpts(filter) {
+        if (!menuEl) return;
+        const optsWrap = menuEl.querySelector('.opts');
+        const tmp = document.createElement('div');
+        tmp.innerHTML = buildMenu(filter);
+        optsWrap.innerHTML = tmp.querySelector('.opts').innerHTML;
+        wireOpts();
+      }
+      function paintActive(opts) {
+        opts.forEach((o, i) => o.classList.toggle('active', i === activeIdx));
+        if (opts[activeIdx]) opts[activeIdx].scrollIntoView({ block: 'nearest' });
+      }
+      function selectOpt(opt) {
+        if (!opt) return;
+        const keep = menuEl ? (menuEl.querySelector('.srch') || {}).value || "" : "";
+        if (opt.dataset.add != null) {
+          const v = (opt.dataset.add || "").trim();
+          if (v && !set.selected.some(s => s.toLowerCase() === v.toLowerCase())) set.selected.push(v);
+        } else if (opt.dataset.opt != null) {
+          const val = opt.dataset.opt;
+          if (set.selected.some(s => s.toLowerCase() === val.toLowerCase()))
+            set.selected = set.selected.filter(s => s !== val);
+          else set.selected.push(val);
+        }
+        render();          // closes the menu
+        openMenu(keep);    // reopen so the user can keep toggling
+      }
+      function wireOpts() {
+        menuEl.querySelectorAll('.opt').forEach(opt => {
+          opt.addEventListener('mousedown', (e) => { e.preventDefault(); selectOpt(opt); });
+        });
+      }
+
+      function render() {
+        closeMenu();
+        const chips = set.selected.map(v =>
+          '<span class="tag">' + v + '<span class="x" data-rm="' + v.replace(/"/g, '&quot;') + '">×</span></span>'
+        ).join("");
+        row.innerHTML = chips +
+          '<span class="addtag"><button type="button" class="addtag-btn">' + plusSvg +
+          (set.selected.length ? 'Add' : 'Add ' + (key === 'vibe' ? 'a vibe' : 'a must-have')) +
+          '</button></span>';
+        row.querySelectorAll('[data-rm]').forEach(x =>
+          x.addEventListener('click', () => remove(x.getAttribute('data-rm')))
+        );
+        const btn = row.querySelector('.addtag-btn');
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (menuEl) closeMenu(); else openMenu();
+        });
+      }
+
+      const outside = (e) => { if (menuEl && !field.contains(e.target)) closeMenu(); };
+      document.addEventListener('click', outside);
+      tagCleanups.push(() => document.removeEventListener('click', outside));
+
+      render();
+    });
+
+    /* ---------- weights (independent sliders + adjust-to-100%) ---------- */
+    const WEIGHTS = [
+      { id: "safety", label: "Safety & area", hint: "Verified neighbourhood + recent reviews", w: 25 },
+      { id: "quiet",  label: "Quietness",     hint: "Noise mentions across reviews",            w: 25 },
+      { id: "walk",   label: "Walkability",   hint: "Distance to centre + transit",             w: 20 },
+      { id: "value",  label: "Value",         hint: "Price vs. quality vs. location",           w: 15 },
+      { id: "clean",  label: "Cleanliness",   hint: "Housekeeping mentions",                    w: 10 },
+      { id: "family", label: "Family fit",    hint: "Cribs, space, kid amenities",              w: 5 },
+    ];
+    const wrapEl = document.getElementById('weights');
+    const totalEl = document.getElementById('total');
+    const fixBtn = document.getElementById('fix100');
+
+    function total() { return WEIGHTS.reduce((s, w) => s + w.w, 0); }
+
+    function paintTotals() {
+      const t = total();
+      if (totalEl) {
+        totalEl.textContent = "Total " + t + "%";
+        totalEl.classList.toggle('warn', t !== 100);
+      }
+      if (fixBtn) fixBtn.classList.toggle('show', t !== 100);
+    }
+
+    function renderWeights() {
+      if (!wrapEl) return;
+      wrapEl.innerHTML = WEIGHTS.map(x => `
+        <div class="wrow">
+          <div class="wl">${x.label}<small>${x.hint}</small></div>
+          <div class="slider">
+            <div class="trk"></div><div class="fill" data-fill="${x.id}" style="width:${x.w}%"></div>
+            <input type="range" min="0" max="100" value="${x.w}" data-id="${x.id}"/>
+          </div>
+          <div class="wv" data-val="${x.id}">${x.w}%</div>
+        </div>`).join("");
+      wrapEl.querySelectorAll('input[type=range]').forEach(inp => {
+        inp.addEventListener('input', () => setWeight(inp.dataset.id, parseInt(inp.value, 10)));
+      });
+      paintTotals();
+    }
+
+    // independent: moving one slider does NOT rebalance the others
+    function setWeight(id, v) {
+      const w = WEIGHTS.find(x => x.id === id);
+      if (!w) return;
+      w.w = v;
+      const f = wrapEl.querySelector(`[data-fill="${id}"]`); if (f) f.style.width = v + "%";
+      const vv = wrapEl.querySelector(`[data-val="${id}"]`); if (vv) vv.textContent = v + "%";
+      paintTotals();
+    }
+
+    // normalize all weights proportionally so they sum to 100
+    function adjustTo100() {
+      const sum = total();
+      if (sum === 100) return;
+      if (sum === 0) {
+        const even = Math.round(100 / WEIGHTS.length);
+        WEIGHTS.forEach((w, i) => w.w = i === 0 ? 100 - even * (WEIGHTS.length - 1) : even);
+      } else {
+        WEIGHTS.forEach(w => w.w = Math.round(w.w * 100 / sum));
+        const drift = 100 - total();
+        if (drift !== 0) {
+          const t = [...WEIGHTS].sort((a, b) => b.w - a.w)[0];
+          if (t) t.w += drift;
+        }
+      }
+      // reflect into existing DOM without full re-render
+      WEIGHTS.forEach(w => {
+        const f = wrapEl.querySelector(`[data-fill="${w.id}"]`); if (f) f.style.width = w.w + "%";
+        const vv = wrapEl.querySelector(`[data-val="${w.id}"]`); if (vv) vv.textContent = w.w + "%";
+        const rg = wrapEl.querySelector(`input[data-id="${w.id}"]`); if (rg) rg.value = w.w;
+      });
+      paintTotals();
+    }
+    if (fixBtn) fixBtn.addEventListener('click', adjustTo100);
+
+    renderWeights();
+
+    /* ---------- clouds ---------- */
+    let UID = 0;
+    function realCloud(w, h, type, color) {
+      const id = "c" + (UID++);
+      const seed = Math.floor(Math.random() * 9000) + 1;
+      const [r, g, b] = color.map(v => Math.round(v * 255));
+      const col = `rgb(${r},${g},${b})`;
+      const sh = `rgb(${Math.round(r * 0.70)},${Math.round(g * 0.78)},${Math.round(b * 0.90)})`;
+      const J = (v, a) => v + (Math.random() * 2 - 1) * a;
+      const Z = (v) => v * (0.82 + Math.random() * 0.40);
+      let base;
+      if (type === "streak") {
+        base = [[0.5, 0.5, 0.42, 0.11], [0.30, 0.52, 0.16, 0.07], [0.70, 0.47, 0.18, 0.07], [0.5, 0.5, 0.30, 0.06]];
+      } else {
+        base = [[0.32, 0.50, 0.20, 0.18], [0.50, 0.40, 0.245, 0.225], [0.66, 0.49, 0.205, 0.185],
+                [0.43, 0.55, 0.16, 0.14], [0.60, 0.56, 0.15, 0.125], [0.25, 0.55, 0.13, 0.115],
+                [0.78, 0.55, 0.12, 0.105]];
+      }
+      const lumps = base.map(([cx, cy, rx, ry]) => [J(cx, 0.035), J(cy, 0.028), Z(rx), Z(ry)]);
+      const body = lumps.map(([cx, cy, rx, ry]) =>
+        `<ellipse cx="${(w * cx).toFixed(1)}" cy="${(h * cy).toFixed(1)}" rx="${(w * rx).toFixed(1)}" ry="${(h * ry).toFixed(1)}" fill="url(#g${id})"/>`).join("");
+      const shade = lumps.map(([cx, cy, rx, ry]) =>
+        `<ellipse cx="${(w * (cx + rx * 0.26)).toFixed(1)}" cy="${(h * (cy + ry * 0.46)).toFixed(1)}" rx="${(w * rx * 0.72).toFixed(1)}" ry="${(h * ry * 0.64).toFixed(1)}" fill="url(#s${id})"/>`).join("");
+      const dscale = type === "streak" ? Math.round(h * 0.18) : Math.round(h * 0.14);
+      const blur = type === "streak" ? 3 : 2;
+      const bf = type === "streak" ? (0.013 + Math.random() * 0.004).toFixed(4) + " 0.02"
+                                   : (0.010 + Math.random() * 0.004).toFixed(4);
+      return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="overflow:visible">
+        <defs>
+          <radialGradient id="g${id}" cx="46%" cy="42%" r="54%">
+            <stop offset="0%" stop-color="${col}" stop-opacity="1"/>
+            <stop offset="60%" stop-color="${col}" stop-opacity="0.97"/>
+            <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="s${id}" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="${sh}" stop-opacity="0.5"/>
+            <stop offset="55%" stop-color="${sh}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${sh}" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="t${id}" x="-45%" y="-50%" width="190%" height="210%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="${bf}" numOctaves="5" seed="${seed}" result="n"/>
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="${dscale}" xChannelSelector="R" yChannelSelector="G"/>
+            <feGaussianBlur stdDeviation="${blur}"/>
+          </filter>
+        </defs>
+        <g filter="url(#t${id})">${body}${shade}</g>
+      </svg>`;
+    }
+    const WHITE_CLOUD = [1, 1, 1];
+    const BLUE_CLOUD = [0.64, 0.84, 0.95];
+    const ZONES = {
+      head: { color: WHITE_CLOUD, list: [
+        { l: "60%", t: "-2%", type: "cumulus", w: 460, h: 210, o: 0.95, d: 82 },
+        { l: "-5%", t: "24%", type: "cumulus", w: 340, h: 160, o: 0.8, d: 90 },
+        { l: "30%", t: "6%", type: "cumulus", w: 200, h: 104, o: 0.5, d: 62 },
+      ]},
+      steps: { color: BLUE_CLOUD, list: [
+        { l: "-4%", t: "10%", type: "cumulus", w: 320, h: 150, o: 0.26, d: 84 },
+        { l: "80%", t: "54%", type: "cumulus", w: 280, h: 132, o: 0.22, d: 80 },
+      ]},
+    };
+    function paintAll() {
+      document.querySelectorAll('.cloud-layer').forEach(el => {
+        const z = ZONES[el.dataset.zone]; if (!z) return;
+        el.innerHTML = z.list.map((c, i) => {
+          const svg = realCloud(c.w, c.h, c.type, z.color);
+          const dir = i % 2 ? "reverse" : "normal";
+          return `<div class="cloud" style="left:${c.l};top:${c.t};opacity:${c.o};animation:drift ${c.d}s ease-in-out ${dir} infinite alternate;">${svg}</div>`;
+        }).join("");
+      });
+    }
+    paintAll();
+
+    return () => { tagCleanups.forEach(fn => fn()); };
+    /* eslint-enable */
+  }, []);
+
   return (
-    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#EFE9DD' }} />}>
-      <FiltersContent />
-    </Suspense>
-  )
+    <>
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      <div dangerouslySetInnerHTML={{ __html: BODY }} />
+    </>
+  );
 }
