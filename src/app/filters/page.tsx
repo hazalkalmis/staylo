@@ -329,6 +329,17 @@ export default function ConfirmPage() {
       },
     };
 
+    
+    try {
+      const _sd = JSON.parse(sessionStorage.getItem("staylo_search") || "null");
+      const _mh = _sd && _sd.filters && Array.isArray(_sd.filters.mustHaves) ? _sd.filters.mustHaves : null;
+      if (_mh) {
+        const cap = x => x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
+        TAGSETS.must.selected = _mh.map(cap);
+      }
+      TAGSETS.vibe.selected = []; // vibe: search bunu cikarmiyor, bos baslasin
+    } catch(e) {}
+
     const plusSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
     const ckSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
     const tagCleanups = [];
@@ -477,6 +488,36 @@ export default function ConfirmPage() {
       { id: "clean",  label: "Cleanliness",   hint: "Housekeeping mentions",                    w: 10 },
       { id: "family", label: "Family fit",    hint: "Cribs, space, kid amenities",              w: 5 },
     ];
+    
+    /* ---------- load search data from sessionStorage ---------- */
+    let SD = null;
+    try { SD = JSON.parse(sessionStorage.getItem("staylo_search") || "null"); } catch(e) { SD = null; }
+    const F = SD && SD.filters ? SD.filters : null;
+
+    // veri yoksa: kullaniciyi search sayfasina geri yolla
+    if (!F) { window.location.replace("/search"); return; }
+
+    // --- alanlari doldur ---
+    const setVal = (sel, val) => { const el = document.querySelector(sel); if (el && val != null && val !== "") el.value = val; };
+    const fieldByLabel = (txt) => {
+      const labels = Array.from(document.querySelectorAll(".field label"));
+      const m = labels.find(l => l.textContent.trim().toLowerCase().startsWith(txt));
+      return m ? m.parentElement.querySelector("input") : null;
+    };
+    const cityStr = [F.city, F.country].filter(Boolean).join(", ");
+    const cityInput = fieldByLabel("city"); if (cityInput && cityStr) cityInput.value = cityStr;
+    const guestsInput = fieldByLabel("guests"); if (guestsInput && F.guests) guestsInput.value = F.guests + (F.guests > 1 ? " adults" : " adult");
+    const ciInput = fieldByLabel("check in"); if (ciInput && F.checkIn) ciInput.value = F.checkIn;
+    const coInput = fieldByLabel("check out"); if (coInput && F.checkOut) coInput.value = F.checkOut;
+    const minInput = fieldByLabel("min budget"); if (minInput && F.budget && F.budget.min != null) minInput.value = F.budget.min;
+    const maxInput = fieldByLabel("max budget"); if (maxInput && F.budget && F.budget.max != null) maxInput.value = F.budget.max;
+
+    // baslik cumlesi + sehir damgasi
+    const stamp = document.querySelector("h1 .stamp"); if (stamp && F.city) stamp.textContent = F.city;
+    const subQuery = SD.query ? SD.query : "";
+    const h1El = document.querySelector("header.head h1");
+    if (h1El && F.city) h1El.innerHTML = "Your search in <span style=\"white-space:nowrap\"><span class=\"stamp\">" + F.city + "</span></span>.";
+
     const wrapEl = document.getElementById('weights');
     const totalEl = document.getElementById('total');
     const fixBtn = document.getElementById('fix100');
@@ -544,6 +585,11 @@ export default function ConfirmPage() {
     }
     if (fixBtn) fixBtn.addEventListener('click', adjustTo100);
 
+    
+    if (F && F.weights) {
+      const wmap = { safety:"safety", quiet:"quiet", walk:"walkability", value:"value", clean:"cleanliness", family:"family" };
+      WEIGHTS.forEach(w => { const k = wmap[w.id]; if (k && typeof F.weights[k] === "number") w.w = F.weights[k]; });
+    }
     renderWeights();
 
     /* ---------- clouds ---------- */
