@@ -140,6 +140,16 @@ export async function POST(request: NextRequest) {
     }
     const { query } = parsed.data
 
+    // ---------- honeypot: bot gizli alani doldurduysa sessizce bos basari don ----------
+    const rawBody: any = raw || {}
+    if (typeof rawBody.hp === "string" && rawBody.hp.trim() !== "") {
+      return NextResponse.json({
+        filters: { city:"", country:"", checkIn:null, checkOut:null, guests:2,
+          budget:{min:null,max:null,currency:"EUR"}, priorities:[], mustHaves:[],
+          weights:{safety:20,quiet:20,family:10,value:25,walkability:15,cleanliness:10}, userLanguage:"en" }
+      })
+    }
+
     // 2) ⚠️ Rate limit
     const ip = getClientIp(request)
     const rl = await checkRateLimit(ip)
