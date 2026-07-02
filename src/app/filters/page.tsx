@@ -116,6 +116,10 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
            border:1px solid var(--border);border-radius:13px;box-shadow:0 26px 64px -30px rgba(3,4,94,0.5);
            z-index:40;padding:8px;}
   .tagmenu.open{display:block;}
+  /* MUST MENU UP: son alanin (must) dropdown-u yukari acilsin, kartin altinda kalmasin */
+  [data-tagfield="must"] .tagmenu{top:auto;bottom:calc(100% + 7px);z-index:60;}
+  [data-tagfield="vibe"] .tagmenu{top:auto;bottom:calc(100% + 7px);z-index:60;}
+  .card{overflow:visible;} .xfields{overflow:visible;} .xfield{overflow:visible;}
   .tagmenu .srch{width:100%;border:1px solid var(--border);outline:none;border-radius:9px;background:var(--surface-2);
                  font:500 13.5px 'Geist',sans-serif;color:var(--ink);padding:8px 11px;margin-bottom:6px;}
   .tagmenu .srch::placeholder{color:var(--faint);font-weight:400;}
@@ -309,40 +313,105 @@ export default function ConfirmPage() {
   useEffect(() => {
     /* eslint-disable */
 
-    /* ---------- Vibe / Must-have tag fields (searchable, optional) ---------- */
-    // selected: comes from the previous search. If the search didn't mention
-    // any vibe / must-have, start empty — the user can add their own.
+    /* ---------- load search data from sessionStorage ---------- */
+    let SD = null;
+    try { SD = JSON.parse(sessionStorage.getItem("staylo_search") || "null"); } catch(e) { SD = null; }
+    const F = SD && SD.filters ? SD.filters : null;
+    if (!F) { window.location.replace("/search"); return; }
+    const LANG = (F && ["en","tr","de","fr","es"].includes(F.userLanguage)) ? F.userLanguage : "en";
+
+    /* ---------- I18N: UI strings ---------- */
+    const I18N = {
+      en: { yourSearch:"Your search", rank:"How we will rank hotels", vibe:"Vibe", must:"Must-have", optional:"optional",
+            add:"Add", addVibe:"Add a vibe", addMust:"Add a must-have", total:"Total", adjust:"Adjust to 100%",
+            editSearch:"Edit search", findHotels:"Find hotels", searchVibes:"Search vibes…", searchMust:"Search must-haves…",
+            noMore:"No more options", addCustom:"Add", inThe:"Your search in",
+            w:{safety:["Safety & area","Verified neighbourhood + recent reviews"],quiet:["Quietness","Noise mentions across reviews"],walk:["Walkability","Distance to centre + transit"],value:["Value","Price vs. quality vs. location"],clean:["Cleanliness","Housekeeping mentions"],family:["Family fit","Cribs, space, kid amenities"]} },
+      tr: { yourSearch:"Aramanız", rank:"Otelleri nasıl sıralayacağız", vibe:"Tarz", must:"Olmazsa olmaz", optional:"opsiyonel",
+            add:"Ekle", addVibe:"Tarz ekle", addMust:"Olmazsa olmaz ekle", total:"Toplam", adjust:"%100'e ayarla",
+            editSearch:"Aramayı düzenle", findHotels:"Otelleri bul", searchVibes:"Tarz ara…", searchMust:"Özellik ara…",
+            noMore:"Başka seçenek yok", addCustom:"Ekle", inThe:"Arama:",
+            w:{safety:["Güvenlik & bölge","Doğrulanmış mahalle + güncel yorumlar"],quiet:["Sessizlik","Yorumlarda gürültü bahsi"],walk:["Yürünebilirlik","Merkeze + ulaşıma uzaklık"],value:["Fiyat/performans","Fiyat vs. kalite vs. konum"],clean:["Temizlik","Kat hizmeti bahsi"],family:["Aileye uygunluk","Bebek yatağı, alan, çocuk olanakları"]} },
+      de: { yourSearch:"Deine Suche", rank:"So bewerten wir Hotels", vibe:"Ambiente", must:"Unverzichtbar", optional:"optional",
+            add:"Hinzufügen", addVibe:"Ambiente hinzufügen", addMust:"Unverzichtbares hinzufügen", total:"Gesamt", adjust:"Auf 100% setzen",
+            editSearch:"Suche bearbeiten", findHotels:"Hotels finden", searchVibes:"Ambiente suchen…", searchMust:"Ausstattung suchen…",
+            noMore:"Keine weiteren Optionen", addCustom:"Hinzufügen", inThe:"Deine Suche in",
+            w:{safety:["Sicherheit & Lage","Geprüftes Viertel + aktuelle Bewertungen"],quiet:["Ruhe","Lärm-Erwähnungen in Bewertungen"],walk:["Fußläufigkeit","Entfernung zum Zentrum + Verkehr"],value:["Preis-Leistung","Preis vs. Qualität vs. Lage"],clean:["Sauberkeit","Erwähnungen zur Reinigung"],family:["Familienfreundlich","Betten, Platz, Kinderausstattung"]} },
+      fr: { yourSearch:"Votre recherche", rank:"Comment nous classons les hôtels", vibe:"Ambiance", must:"Indispensable", optional:"facultatif",
+            add:"Ajouter", addVibe:"Ajouter une ambiance", addMust:"Ajouter un indispensable", total:"Total", adjust:"Ajuster à 100%",
+            editSearch:"Modifier la recherche", findHotels:"Trouver des hôtels", searchVibes:"Rechercher des ambiances…", searchMust:"Rechercher des équipements…",
+            noMore:"Aucune autre option", addCustom:"Ajouter", inThe:"Votre recherche à",
+            w:{safety:["Sécurité & quartier","Quartier vérifié + avis récents"],quiet:["Calme","Mentions de bruit dans les avis"],walk:["Accessibilité à pied","Distance au centre + transports"],value:["Rapport qualité-prix","Prix vs. qualité vs. emplacement"],clean:["Propreté","Mentions de ménage"],family:["Adapté aux familles","Lits bébé, espace, équipements enfants"]} },
+      es: { yourSearch:"Tu búsqueda", rank:"Cómo clasificamos los hoteles", vibe:"Ambiente", must:"Imprescindible", optional:"opcional",
+            add:"Añadir", addVibe:"Añadir ambiente", addMust:"Añadir imprescindible", total:"Total", adjust:"Ajustar al 100%",
+            editSearch:"Editar búsqueda", findHotels:"Buscar hoteles", searchVibes:"Buscar ambientes…", searchMust:"Buscar servicios…",
+            noMore:"No hay más opciones", addCustom:"Añadir", inThe:"Tu búsqueda en",
+            w:{safety:["Seguridad & zona","Barrio verificado + reseñas recientes"],quiet:["Tranquilidad","Menciones de ruido en reseñas"],walk:["Caminabilidad","Distancia al centro + transporte"],value:["Relación calidad-precio","Precio vs. calidad vs. ubicación"],clean:["Limpieza","Menciones de limpieza"],family:["Apto para familias","Cunas, espacio, servicios para niños"]} },
+    };
+    const T = I18N[LANG];
+
+    /* ---------- Vibe / Must-have tag fields (two-layer: value + label) ----------
+       Each option: { v: snake_case_value (stored, English, goes to Booking/scoring),
+                      en/tr/de/fr/es: display label per language }
+       selected[] holds VALUES (snake_case). Chip shows label in LANG. */
+    const VIBE_OPTS = [
+      { v:"quiet_calm",      en:"Quiet & calm",        tr:"Sessiz & sakin",       de:"Ruhig & entspannt",   fr:"Calme & paisible",      es:"Tranquilo y sereno" },
+      { v:"lively_social",   en:"Lively & social",     tr:"Canlı & sosyal",       de:"Lebhaft & gesellig",  fr:"Animé & convivial",     es:"Animado y social" },
+      { v:"boutique_design", en:"Boutique & design-led",tr:"Butik & tasarım",     de:"Boutique & Design",   fr:"Boutique & design",     es:"Boutique y diseño" },
+      { v:"romantic",        en:"Romantic",            tr:"Romantik",             de:"Romantisch",          fr:"Romantique",            es:"Romántico" },
+      { v:"family_friendly", en:"Family-friendly",     tr:"Aile dostu",           de:"Familienfreundlich",  fr:"Familial",              es:"Familiar" },
+      { v:"local_authentic", en:"Local & authentic",   tr:"Yerel & otantik",      de:"Lokal & authentisch", fr:"Local & authentique",   es:"Local y auténtico" },
+      { v:"luxury",          en:"Luxury",              tr:"Lüks",                 de:"Luxus",               fr:"Luxe",                  es:"Lujo" },
+      { v:"budget_friendly", en:"Budget-friendly",     tr:"Bütçe dostu",          de:"Preisgünstig",        fr:"Économique",            es:"Económico" },
+      { v:"trendy_modern",   en:"Trendy & modern",     tr:"Modern & trend",       de:"Trendig & modern",    fr:"Tendance & moderne",    es:"Moderno y de moda" },
+      { v:"historic_charming",en:"Historic & charming",tr:"Tarihi & şirin",       de:"Historisch & charmant",fr:"Historique & charmant",es:"Histórico y con encanto" },
+      { v:"adults_only",     en:"Adults-only",         tr:"Sadece yetişkin",      de:"Nur für Erwachsene",  fr:"Adultes uniquement",    es:"Solo adultos" },
+      { v:"nature_views",    en:"Nature & views",      tr:"Doğa & manzara",       de:"Natur & Aussicht",    fr:"Nature & vues",         es:"Naturaleza y vistas" },
+    ];
+    const MUST_OPTS = [
+      { v:"breakfast_included",en:"Breakfast included",tr:"Kahvaltı dahil",       de:"Frühstück inklusive", fr:"Petit-déjeuner inclus", es:"Desayuno incluido" },
+      { v:"free_wifi",       en:"Free WiFi",           tr:"Ücretsiz WiFi",        de:"Kostenloses WLAN",    fr:"WiFi gratuit",          es:"WiFi gratis" },
+      { v:"walk_to_centre",  en:"Walk to centre",      tr:"Merkeze yürüme",       de:"Zu Fuß ins Zentrum",  fr:"À pied du centre",      es:"A pie del centro" },
+      { v:"air_conditioning",en:"Air conditioning",    tr:"Klima",                de:"Klimaanlage",         fr:"Climatisation",         es:"Aire acondicionado" },
+      { v:"pool",            en:"Pool",                tr:"Havuz",                de:"Pool",                fr:"Piscine",               es:"Piscina" },
+      { v:"pet_friendly",    en:"Pet-friendly",        tr:"Evcil hayvan dostu",   de:"Haustierfreundlich",  fr:"Animaux acceptés",      es:"Admite mascotas" },
+      { v:"family_rooms",    en:"Family rooms",        tr:"Aile odaları",         de:"Familienzimmer",      fr:"Chambres familiales",   es:"Habitaciones familiares" },
+      { v:"free_parking",    en:"Free parking",        tr:"Ücretsiz otopark",     de:"Kostenlose Parkplätze",fr:"Parking gratuit",      es:"Parking gratis" },
+      { v:"airport_shuttle", en:"Airport shuttle",     tr:"Havalimanı servisi",   de:"Flughafentransfer",   fr:"Navette aéroport",      es:"Traslado aeropuerto" },
+      { v:"gym_fitness",     en:"Gym / fitness",       tr:"Spor salonu",          de:"Fitnessraum",         fr:"Salle de sport",        es:"Gimnasio" },
+      { v:"kitchenette",     en:"Kitchen / kitchenette",tr:"Mutfak",              de:"Küche / Küchenzeile", fr:"Cuisine / kitchenette", es:"Cocina / kitchenette" },
+      { v:"reception_24h",   en:"24-hour reception",   tr:"24 saat resepsiyon",   de:"24-Stunden-Rezeption",fr:"Réception 24h/24",      es:"Recepción 24h" },
+      { v:"non_smoking",     en:"Non-smoking",         tr:"Sigara içilmez",       de:"Nichtraucher",        fr:"Non-fumeur",            es:"No fumadores" },
+      { v:"spa",             en:"Spa",                 tr:"Spa",                  de:"Spa",                 fr:"Spa",                   es:"Spa" },
+      { v:"balcony",         en:"Balcony",             tr:"Balkon",               de:"Balkon",              fr:"Balcon",                es:"Balcón" },
+    ];
+
     const TAGSETS = {
-      vibe: {
-        selected: ["Quiet & calm", "Boutique & design-led"],
-        options: ["Quiet & calm","Lively & social","Boutique & design-led","Romantic",
-                  "Family-friendly","Local & authentic","Luxury","Budget-friendly",
-                  "Trendy & modern","Historic & charming","Adults-only","Nature & views"],
-        placeholder: "Search vibes…",
-      },
-      must: {
-        selected: ["Walk to centre", "Breakfast included"],
-        options: ["Breakfast included","Free WiFi","Walk to centre","Air conditioning","Pool",
-                  "Pet-friendly","Family rooms","Free parking","Airport shuttle","Gym / fitness",
-                  "Kitchen / kitchenette","24-hour reception","Non-smoking","Spa","Balcony"],
-        placeholder: "Search must-haves…",
-      },
+      vibe: { options: VIBE_OPTS, selected: [], placeholder: T.searchVibes, addLabel: T.addVibe },
+      must: { options: MUST_OPTS, selected: [], placeholder: T.searchMust, addLabel: T.addMust },
     };
 
-    
+    // labelFor: value -> display label in current LANG (fallback: en, then value)
+    function labelFor(setKey, val) {
+      const opt = TAGSETS[setKey].options.find(o => o.v === val);
+      if (opt) return opt[LANG] || opt.en || val;
+      return val; // custom value: show as-is
+    }
+
+    // preselect must-haves from search (snake_case already from Gemini)
     try {
-      const _sd = JSON.parse(sessionStorage.getItem("staylo_search") || "null");
-      const _mh = _sd && _sd.filters && Array.isArray(_sd.filters.mustHaves) ? _sd.filters.mustHaves : null;
-      if (_mh) {
-        const cap = x => x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
-        TAGSETS.must.selected = _mh.map(cap);
+      const mh = F && Array.isArray(F.mustHaves) ? F.mustHaves : null;
+      if (mh) {
+        // Gemini returns lowercase words like "pool","breakfast","wifi"; map common ones to our values
+        const MAP = { pool:"pool", breakfast:"breakfast_included", wifi:"free_wifi", parking:"free_parking", gym:"gym_fitness" };
+        TAGSETS.must.selected = mh.map(x => MAP[(""+x).toLowerCase()] || (""+x).toLowerCase().replace(/\s+/g,"_"));
       }
-      TAGSETS.vibe.selected = []; // vibe: search bunu cikarmiyor, bos baslasin
     } catch(e) {}
 
     const plusSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
     const ckSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
     const tagCleanups = [];
+    const esc = (x) => (""+x).replace(/"/g, '&quot;');
 
     document.querySelectorAll('[data-tagfield]').forEach(field => {
       const key = field.getAttribute('data-tagfield');
@@ -352,49 +421,61 @@ export default function ConfirmPage() {
       let menuEl = null;
       let activeIdx = -1;
 
-      function closeMenu() {
-        if (menuEl) { menuEl.remove(); menuEl = null; activeIdx = -1; }
-      }
+      function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; activeIdx = -1; } }
 
-      function add(value) {
-        const v = (value || "").trim();
-        if (!v) return;
-        if (!set.selected.some(s => s.toLowerCase() === v.toLowerCase())) set.selected.push(v);
+      // add a custom typed value: snake_case it, label = what user typed
+      function addCustom(text) {
+        const label = (text || "").trim();
+        if (!label) return;
+        const val = label.toLowerCase().replace(/\s+/g, "_").replace(/[^\w]/g, "");
+        if (!val) return;
+        if (!set.selected.includes(val)) {
+          // remember custom label so chip shows what they typed
+          set._custom = set._custom || {};
+          set._custom[val] = label;
+          set.selected.push(val);
+        }
         const keep = menuEl ? (menuEl.querySelector('.srch') || {}).value || "" : "";
-        render();          // render() closes any open menu
-        openMenu(keep);    // reopen for multi-add, preserving the typed filter
+        render(); openMenu(keep);
       }
-      function remove(value) {
-        set.selected = set.selected.filter(s => s !== value);
-        render();
+      function toggleVal(val) {
+        if (set.selected.includes(val)) set.selected = set.selected.filter(s => s !== val);
+        else set.selected.push(val);
+      }
+      function remove(val) { set.selected = set.selected.filter(s => s !== val); render(); }
+
+      function displayLabel(val) {
+        if (set._custom && set._custom[val]) return set._custom[val];
+        return labelFor(key, val);
       }
 
       function buildMenu(filter) {
         const f = (filter || "").trim().toLowerCase();
-        const matches = set.options.filter(o => o.toLowerCase().includes(f));
-        let html = '<input class="srch" placeholder="' + set.placeholder + '" />';
+        // match against label in current language OR english OR value
+        const matches = set.options.filter(o =>
+          (o[LANG]||"").toLowerCase().includes(f) || o.en.toLowerCase().includes(f) || o.v.includes(f.replace(/\s+/g,"_"))
+        );
+        let html = '<input class="srch" placeholder="' + esc(set.placeholder) + '" />';
         html += '<div class="opts">';
         if (matches.length) {
           matches.forEach((o, i) => {
-            const sel = set.selected.some(s => s.toLowerCase() === o.toLowerCase());
+            const sel = set.selected.includes(o.v);
             html += '<div class="opt' + (sel ? ' sel' : '') + (i === activeIdx ? ' active' : '') +
-                    '" data-opt="' + o.replace(/"/g, '&quot;') + '">' +
-                    '<span>' + o + '</span><span class="ck">' + ckSvg + '</span></div>';
+                    '" data-val="' + esc(o.v) + '">' +
+                    '<span>' + (o[LANG]||o.en) + '</span><span class="ck">' + ckSvg + '</span></div>';
           });
         }
-        const exact = set.options.some(o => o.toLowerCase() === f) ||
-                      set.selected.some(s => s.toLowerCase() === f);
-        if (f && !exact) {
-          html += '<div class="opt add" data-add="' + f.replace(/"/g, '&quot;') + '">+ Add “' + filter.trim() + '”</div>';
+        const labelExists = set.options.some(o => (o[LANG]||"").toLowerCase() === f || o.en.toLowerCase() === f);
+        if (f && !labelExists) {
+          html += '<div class="opt add" data-add="' + esc(filter.trim()) + '">+ ' + T.addCustom + ' “' + filter.trim() + '”</div>';
         }
-        if (!matches.length && !f) html += '<div class="empty">No more options</div>';
+        if (!matches.length && !f) html += '<div class="empty">' + T.noMore + '</div>';
         html += '</div>';
         return html;
       }
 
       function openMenu(keepVal) {
-        const keep = typeof keepVal === 'string'
-          ? keepVal
+        const keep = typeof keepVal === 'string' ? keepVal
           : (menuEl ? (menuEl.querySelector('.srch') || {}).value || "" : "");
         closeMenu();
         const btn = row.querySelector('.addtag');
@@ -404,18 +485,14 @@ export default function ConfirmPage() {
         menuEl.innerHTML = buildMenu(keep);
         btn.appendChild(menuEl);
         const srch = menuEl.querySelector('.srch');
-        srch.value = keep;
-        srch.focus();
+        srch.value = keep; srch.focus();
         srch.addEventListener('input', () => { activeIdx = -1; refreshOpts(srch.value); });
         srch.addEventListener('keydown', (e) => {
           const opts = Array.from(menuEl.querySelectorAll('.opt'));
           if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(opts.length - 1, activeIdx + 1); paintActive(opts); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(0, activeIdx - 1); paintActive(opts); }
-          else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (activeIdx >= 0 && opts[activeIdx]) selectOpt(opts[activeIdx]);
-            else add(srch.value);
-          } else if (e.key === 'Escape') { closeMenu(); }
+          else if (e.key === 'Enter') { e.preventDefault(); if (activeIdx >= 0 && opts[activeIdx]) selectOpt(opts[activeIdx]); else addCustom(srch.value); }
+          else if (e.key === 'Escape') { closeMenu(); }
         });
         wireOpts();
       }
@@ -435,17 +512,8 @@ export default function ConfirmPage() {
       function selectOpt(opt) {
         if (!opt) return;
         const keep = menuEl ? (menuEl.querySelector('.srch') || {}).value || "" : "";
-        if (opt.dataset.add != null) {
-          const v = (opt.dataset.add || "").trim();
-          if (v && !set.selected.some(s => s.toLowerCase() === v.toLowerCase())) set.selected.push(v);
-        } else if (opt.dataset.opt != null) {
-          const val = opt.dataset.opt;
-          if (set.selected.some(s => s.toLowerCase() === val.toLowerCase()))
-            set.selected = set.selected.filter(s => s !== val);
-          else set.selected.push(val);
-        }
-        render();          // closes the menu
-        openMenu(keep);    // reopen so the user can keep toggling
+        if (opt.dataset.add != null) { addCustom(opt.dataset.add); return; }
+        if (opt.dataset.val != null) { toggleVal(opt.dataset.val); render(); openMenu(keep); }
       }
       function wireOpts() {
         menuEl.querySelectorAll('.opt').forEach(opt => {
@@ -455,21 +523,19 @@ export default function ConfirmPage() {
 
       function render() {
         closeMenu();
-        const chips = set.selected.map(v =>
-          '<span class="tag">' + v + '<span class="x" data-rm="' + v.replace(/"/g, '&quot;') + '">×</span></span>'
+        const chips = set.selected.map(val =>
+          '<span class="tag" data-v="' + esc(val) + '">' + displayLabel(val) +
+          '<span class="x" data-rm="' + esc(val) + '">×</span></span>'
         ).join("");
         row.innerHTML = chips +
           '<span class="addtag"><button type="button" class="addtag-btn">' + plusSvg +
-          (set.selected.length ? 'Add' : 'Add ' + (key === 'vibe' ? 'a vibe' : 'a must-have')) +
+          (set.selected.length ? T.add : set.addLabel) +
           '</button></span>';
         row.querySelectorAll('[data-rm]').forEach(x =>
           x.addEventListener('click', () => remove(x.getAttribute('data-rm')))
         );
         const btn = row.querySelector('.addtag-btn');
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (menuEl) closeMenu(); else openMenu();
-        });
+        btn.addEventListener('click', (e) => { e.stopPropagation(); if (menuEl) closeMenu(); else openMenu(); });
       }
 
       const outside = (e) => { if (menuEl && !field.contains(e.target)) closeMenu(); };
@@ -479,26 +545,7 @@ export default function ConfirmPage() {
       render();
     });
 
-    /* ---------- weights (independent sliders + adjust-to-100%) ---------- */
-    const WEIGHTS = [
-      { id: "safety", label: "Safety & area", hint: "Verified neighbourhood + recent reviews", w: 25 },
-      { id: "quiet",  label: "Quietness",     hint: "Noise mentions across reviews",            w: 25 },
-      { id: "walk",   label: "Walkability",   hint: "Distance to centre + transit",             w: 20 },
-      { id: "value",  label: "Value",         hint: "Price vs. quality vs. location",           w: 15 },
-      { id: "clean",  label: "Cleanliness",   hint: "Housekeeping mentions",                    w: 10 },
-      { id: "family", label: "Family fit",    hint: "Cribs, space, kid amenities",              w: 5 },
-    ];
-    
-    /* ---------- load search data from sessionStorage ---------- */
-    let SD = null;
-    try { SD = JSON.parse(sessionStorage.getItem("staylo_search") || "null"); } catch(e) { SD = null; }
-    const F = SD && SD.filters ? SD.filters : null;
-
-    // veri yoksa: kullaniciyi search sayfasina geri yolla
-    if (!F) { window.location.replace("/search"); return; }
-
-    // --- alanlari doldur ---
-    const setVal = (sel, val) => { const el = document.querySelector(sel); if (el && val != null && val !== "") el.value = val; };
+    /* ---------- fill criteria fields ---------- */
     const fieldByLabel = (txt) => {
       const labels = Array.from(document.querySelectorAll(".field label"));
       const m = labels.find(l => l.textContent.trim().toLowerCase().startsWith(txt));
@@ -512,27 +559,43 @@ export default function ConfirmPage() {
     const minInput = fieldByLabel("min budget"); if (minInput && F.budget && F.budget.min != null) minInput.value = F.budget.min;
     const maxInput = fieldByLabel("max budget"); if (maxInput && F.budget && F.budget.max != null) maxInput.value = F.budget.max;
 
-    // baslik cumlesi + sehir damgasi
-    const stamp = document.querySelector("h1 .stamp"); if (stamp && F.city) stamp.textContent = F.city;
-    const subQuery = SD.query ? SD.query : "";
+    // title + city stamp (localized)
     const h1El = document.querySelector("header.head h1");
-    if (h1El && F.city) h1El.innerHTML = "Your search in <span style=\"white-space:nowrap\"><span class=\"stamp\">" + F.city + "</span></span>.";
+    if (h1El && F.city) h1El.innerHTML = T.inThe + ' <span style="white-space:nowrap"><span class="stamp">' + F.city + '</span></span>.';
 
+    // localized headings + labels
+    (function(){
+      const heads = document.querySelectorAll(".card-head h2");
+      if (heads[0]) heads[0].textContent = T.yourSearch;
+      if (heads[1]) heads[1].textContent = T.rank;
+      const vibeLab = document.querySelector('[data-tagfield="vibe"] > label');
+      const mustLab = document.querySelector('[data-tagfield="must"] > label');
+      const optSpan = ' <span style="color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">— ' + T.optional + "</span>";
+      if (vibeLab) vibeLab.innerHTML = T.vibe + optSpan;
+      if (mustLab) mustLab.innerHTML = T.must + optSpan;
+      const ghost = document.querySelector(".actions .btn--ghost"); if (ghost) ghost.textContent = "← " + T.editSearch;
+      const find = document.querySelector(".actions .btn:not(.btn--ghost)"); if (find) find.textContent = T.findHotels + " →";
+    })();
+
+    /* ---------- weights (independent sliders + adjust-to-100%) ---------- */
+    const WEIGHTS = [
+      { id: "safety", label: "Safety & area", hint: "Verified neighbourhood + recent reviews", w: 25 },
+      { id: "quiet",  label: "Quietness",     hint: "Noise mentions across reviews",            w: 25 },
+      { id: "walk",   label: "Walkability",   hint: "Distance to centre + transit",             w: 20 },
+      { id: "value",  label: "Value",         hint: "Price vs. quality vs. location",           w: 15 },
+      { id: "clean",  label: "Cleanliness",   hint: "Housekeeping mentions",                    w: 10 },
+      { id: "family", label: "Family fit",    hint: "Cribs, space, kid amenities",              w: 5 },
+    ];
     const wrapEl = document.getElementById('weights');
     const totalEl = document.getElementById('total');
     const fixBtn = document.getElementById('fix100');
 
     function total() { return WEIGHTS.reduce((s, w) => s + w.w, 0); }
-
     function paintTotals() {
       const t = total();
-      if (totalEl) {
-        totalEl.textContent = "Total " + t + "%";
-        totalEl.classList.toggle('warn', t !== 100);
-      }
+      if (totalEl) { totalEl.textContent = T.total + " " + t + "%"; totalEl.classList.toggle('warn', t !== 100); }
       if (fixBtn) fixBtn.classList.toggle('show', t !== 100);
     }
-
     function renderWeights() {
       if (!wrapEl) return;
       wrapEl.innerHTML = WEIGHTS.map(x => `
@@ -549,8 +612,6 @@ export default function ConfirmPage() {
       });
       paintTotals();
     }
-
-    // independent: moving one slider does NOT rebalance the others
     function setWeight(id, v) {
       const w = WEIGHTS.find(x => x.id === id);
       if (!w) return;
@@ -559,8 +620,6 @@ export default function ConfirmPage() {
       const vv = wrapEl.querySelector(`[data-val="${id}"]`); if (vv) vv.textContent = v + "%";
       paintTotals();
     }
-
-    // normalize all weights proportionally so they sum to 100
     function adjustTo100() {
       const sum = total();
       if (sum === 100) return;
@@ -570,12 +629,8 @@ export default function ConfirmPage() {
       } else {
         WEIGHTS.forEach(w => w.w = Math.round(w.w * 100 / sum));
         const drift = 100 - total();
-        if (drift !== 0) {
-          const t = [...WEIGHTS].sort((a, b) => b.w - a.w)[0];
-          if (t) t.w += drift;
-        }
+        if (drift !== 0) { const t = [...WEIGHTS].sort((a, b) => b.w - a.w)[0]; if (t) t.w += drift; }
       }
-      // reflect into existing DOM without full re-render
       WEIGHTS.forEach(w => {
         const f = wrapEl.querySelector(`[data-fill="${w.id}"]`); if (f) f.style.width = w.w + "%";
         const vv = wrapEl.querySelector(`[data-val="${w.id}"]`); if (vv) vv.textContent = w.w + "%";
@@ -585,11 +640,13 @@ export default function ConfirmPage() {
     }
     if (fixBtn) fixBtn.addEventListener('click', adjustTo100);
 
-    
+    // weights from search
     if (F && F.weights) {
       const wmap = { safety:"safety", quiet:"quiet", walk:"walkability", value:"value", clean:"cleanliness", family:"family" };
       WEIGHTS.forEach(w => { const k = wmap[w.id]; if (k && typeof F.weights[k] === "number") w.w = F.weights[k]; });
     }
+    // localized slider labels
+    if (T.w) { WEIGHTS.forEach(w => { if (T.w[w.id]) { w.label = T.w[w.id][0]; w.hint = T.w[w.id][1]; } }); }
     renderWeights();
 
     /* ---------- clouds ---------- */
