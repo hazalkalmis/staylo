@@ -2,104 +2,28 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
+import { verifyTurnstile } from '@/lib/turnstile'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 // ----------------------------------------------------------------------------
 // ⚠️ Rate limit ayarları (roadmap değerleri)
 // ----------------------------------------------------------------------------
-const DAILY_LIMIT = 10          // IP başına günlük arama
-const BURST_LIMIT = 20          // 1 dakikada bu kadar istek = bot şüphesi
-const BURST_WINDOW_MS = 60_000  // 1 dakika
-const BAN_MS = 60 * 60_000      // 1 saat ban
+const SEARCH_RATE_LIMIT = {
+  dailyLimit: 10,          // IP başına günlük arama
+  burstLimit: 20,          // 1 dakikada bu kadar istek = bot şüphesi
+  burstWindowMs: 60_000,   // 1 dakika
+  banMs: 60 * 60_000,      // 1 saat ban
+}
 
 // ----------------------------------------------------------------------------
 // ⚠️ Input validasyonu (Zod) — XSS/aşırı uzunluk/yanlış tip koruması
 // ----------------------------------------------------------------------------
 const BodySchema = z.object({
   query: z.string().trim().min(2, 'Query too short').max(500, 'Query too long'),
+  turnstileToken: z.string().optional(),
 })
-
-// İstemci IP'sini Vercel header'larından çöz
-function getClientIp(req: NextRequest): string {
-  const xff = req.headers.get('x-forwarded-for')
-  if (xff) return xff.split(',')[0].trim()
-  return req.headers.get('x-real-ip') || 'unknown'
-}
-
-// ----------------------------------------------------------------------------
-// Rate limit: Supabase rate_limits tablosunu oku/güncelle.
-// Dönen: { allowed: boolean, reason?: string }
-// ----------------------------------------------------------------------------
-async function checkRateLimit(ip: string): Promise<{ allowed: boolean; reason?: string }> {
-  const now = Date.now()
-
-  const { data: row, error: rlError } = await supabaseAdmin
-    .from('rate_limits')
-    .select('*')
-    .eq('ip', ip)
-    .maybeSingle()
-
-  if (rlError) {
-    console.error('rate_limit select error:', rlError.message)
-    // DB okunamıyorsa kullanıcıyı bloklama — isteğe izin ver (fail-open)
-    return { allowed: true }
-  }
-
-  // Banlıysa: ban bitmemişse reddet
-  if (row?.banned_until && new Date(row.banned_until).getTime() > now) {
-    return { allowed: false, reason: 'banned' }
-  }
-
-  // Hiç kayıt yoksa: ilk istek, oluştur
-  if (!row) {
-    await supabaseAdmin.from('rate_limits').insert({
-      ip,
-      count: 1,
-      window_start: new Date(now).toISOString(),
-      updated_at: new Date(now).toISOString(),
-    })
-    return { allowed: true }
-  }
-
-  const windowStart = new Date(row.window_start).getTime()
-  const elapsed = now - windowStart
-
-  // Burst kontrolü: pencere 1 dk içindeyse ve sayı BURST_LIMIT'i aştıysa → BAN
-  if (elapsed < BURST_WINDOW_MS && row.count + 1 > BURST_LIMIT) {
-    await supabaseAdmin
-      .from('rate_limits')
-      .update({
-        banned_until: new Date(now + BAN_MS).toISOString(),
-        updated_at: new Date(now).toISOString(),
-      })
-      .eq('ip', ip)
-    // TODO: Resend ile hazalkalmis@gmail.com'a alert (key gelince)
-    return { allowed: false, reason: 'banned' }
-  }
-
-  // Günlük pencere: 24 saat geçtiyse sayacı sıfırla
-  const DAY_MS = 24 * 60 * 60_000
-  if (elapsed > DAY_MS) {
-    await supabaseAdmin
-      .from('rate_limits')
-      .update({ count: 1, window_start: new Date(now).toISOString(), updated_at: new Date(now).toISOString() })
-      .eq('ip', ip)
-    return { allowed: true }
-  }
-
-  // Günlük limit aşıldı mı?
-  if (row.count + 1 > DAILY_LIMIT) {
-    return { allowed: false, reason: 'daily_limit' }
-  }
-
-  // Normal: sayacı artır
-  await supabaseAdmin
-    .from('rate_limits')
-    .update({ count: row.count + 1, updated_at: new Date(now).toISOString() })
-    .eq('ip', ip)
-  return { allowed: true }
-}
 
 // ----------------------------------------------------------------------------
 // weights normalize: toplamı 100'e sabitle (Gemini şaşırsa bile garanti)
@@ -138,7 +62,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    const { query } = parsed.data
+    const { query, turnstileToken } = parsed.data
+    const ip = getClientIp(request)
 
     // ---------- honeypot: bot gizli alani doldurduysa sessizce bos basari don ----------
     const rawBody: any = raw || {}
@@ -150,9 +75,17 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // ---------- Turnstile: honeypot'un ÜSTÜNE ikinci bot koruması katmanı ----------
+    const turnstileOk = await verifyTurnstile(turnstileToken || '', ip)
+    if (!turnstileOk) {
+      return NextResponse.json(
+        { error: 'Verification failed. Please refresh the page and try again.', reason: 'turnstile_failed' },
+        { status: 403 }
+      )
+    }
+
     // 2) ⚠️ Rate limit
-    const ip = getClientIp(request)
-    const rl = await checkRateLimit(ip)
+    const rl = await checkRateLimit(ip, 'search', SEARCH_RATE_LIMIT)
     if (!rl.allowed) {
       const msg =
         rl.reason === 'daily_limit'

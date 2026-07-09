@@ -2,6 +2,8 @@
 "use client";
 
 import { useEffect } from "react";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { wireAuthNav } from "@/lib/authNav";
 
 const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
 
@@ -107,17 +109,34 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
                   border:1px solid var(--border);border-radius:999px;padding:6px 13px;}
   .rfilters .wtag b{color:var(--muted);font-weight:500;margin-left:5px;}
 
+  .map-card{display:none;position:relative;z-index:3;margin-top:26px;border-radius:18px;overflow:hidden;
+            border:1px solid var(--border);box-shadow:0 30px 70px -56px rgba(3,4,94,0.5);background:#f3f9fc;}
+  #hotelMap{width:100%;height:380px;}
+  .map-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+           text-align:center;padding:24px;font-size:14px;color:var(--muted);}
+
   .results{margin-top:26px;display:flex;flex-direction:column;gap:18px;position:relative;z-index:3;}
   .rcard{background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;
-         box-shadow:0 30px 70px -56px rgba(3,4,94,0.5);display:grid;grid-template-columns:228px 1fr 210px;}
+         box-shadow:0 30px 70px -56px rgba(3,4,94,0.5);display:grid;grid-template-columns:228px 1fr 210px;
+         transition:border-color 150ms,box-shadow 150ms;}
+  .rcard.highlight{border-color:var(--ocean);box-shadow:0 0 0 3px rgba(0,119,182,0.32),0 30px 70px -56px rgba(3,4,94,0.5);}
   .rthumb{position:relative;}
   .rthumb .rthumb-ph{position:absolute;inset:0;display:block;}
   .rthumb .rank{position:absolute;top:14px;left:14px;z-index:5;width:34px;height:34px;border-radius:9px;
                 background:rgba(3,4,94,0.86);color:#fff;font-size:14px;font-weight:700;
                 display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+  .rthumb .rfav{position:absolute;top:12px;right:12px;z-index:5;width:36px;height:36px;border:none;border-radius:50%;
+                background:rgba(255,255,255,0.92);backdrop-filter:blur(4px);cursor:pointer;display:flex;
+                align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(3,4,94,0.25);transition:transform 120ms;}
+  .rthumb .rfav:hover{transform:scale(1.08);}
+  .rthumb .rfav svg{width:19px;height:19px;fill:none;stroke:var(--ink);stroke-width:2;}
+  .rthumb .rfav.on svg{fill:#e0245e;stroke:#e0245e;}
   .rmid{padding:24px 28px;display:flex;flex-direction:column;border-left:1px solid var(--border);border-right:1px solid var(--border);}
   .rname{font-size:22px;font-weight:600;letter-spacing:-0.025em;color:var(--ink);}
   .rmeta{font-size:13px;color:var(--muted);margin-top:5px;}
+  .rdist{font-size:12.5px;color:var(--ocean);font-weight:600;margin-top:8px;}
+  .rnearby{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5;}
+  .rnearby b{color:var(--ink);font-weight:600;}
   .rsumq{font-size:14px;color:var(--body);margin:14px 0 0;max-width:480px;}
   .rsumq .serif{color:var(--ocean);font-size:18px;}
   .ribbon{margin-top:auto;display:flex;border:1px solid var(--border);border-radius:11px;overflow:hidden;}
@@ -153,7 +172,8 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rprice span{font-size:12px;color:var(--muted);font-weight:400;}
   .rrail .btn{width:100%;}
 
-  @media(max-width:880px){.rcard{grid-template-columns:1fr;}.rthumb{height:180px;}.rmid{border:none;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}.ribbon{flex-wrap:wrap;}.rib{flex:1 1 33%;}}
+  @media(max-width:880px){.rcard{grid-template-columns:1fr;}.rthumb{height:180px;}.rmid{border:none;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}.ribbon{flex-wrap:wrap;}.rib{flex:1 1 33%;}
+    #hotelMap{height:260px;}}
 
   /* card */
   .card{position:relative;z-index:3;background:#fff;border:1px solid var(--border);border-radius:18px;
@@ -234,10 +254,10 @@ const BODY = `
 <!-- ===== NAV ===== -->
 <nav>
   <div class="nav-row">
-    <a href="/landing.html" class="logo"><span class="w">stayl</span><span class="sq"><span class="h l"></span><span class="h r"></span><span class="o oL">o</span><span class="o oR">o</span></span></a>
+    <a href="/" class="logo"><span class="w">stayl</span><span class="sq"><span class="h l"></span><span class="h r"></span><span class="o oL">o</span><span class="o oR">o</span></span></a>
     <div class="nav-right">
-      <a href="#" class="login">Log in</a>
-      <a href="#" class="btn">Saved</a>
+      <a href="/login" class="login">Log in</a>
+      <a href="/saved" class="btn">Saved</a>
     </div>
   </div>
 </nav>
@@ -247,101 +267,14 @@ const BODY = `
   <div class="cloud-layer" data-zone="head"></div>
   <div class="rhead wrap">
     <div class="reyebrow"><span class="dot"></span>Step 3 of 4 · Your ranked answer</div>
-    <h1>Walkable boutique stay near the <span style="white-space:nowrap"><span class="stamp">Colosseum</span>,</span> quiet, under €220.</h1>
-    <p class="rsub">We read <b>4,120 reviews</b> across <b>23 matching hotels</b> in Rome and scored each on your priorities. Here are the top three.</p>
-    <div class="rfilters">
-      <span class="wtag">Safety<b>25%</b></span>
-      <span class="wtag">Quiet<b>25%</b></span>
-      <span class="wtag">Walkability<b>20%</b></span>
-      <span class="wtag">Value<b>15%</b></span>
-      <span class="wtag">Cleanliness<b>10%</b></span>
-      <span class="wtag">Family<b>5%</b></span>
-      <a href="/filters" class="adjust-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"></path></svg>Adjust priorities</a>
-    </div>
+    <h1 id="rHeadline">Your ranked stays.</h1>
+    <p class="rsub" id="rSub">Scoring hotels on your priorities…</p>
+    <div class="rfilters" id="rFilters"></div>
   </div>
 
-  <div class="results wrap">
-    <article class="rcard">
-      <div class="rthumb"><span class="rank">#1</span><div class="rthumb-ph" style="background:linear-gradient(135deg,#bee1e6,#90e0ef)"></div></div>
-      <div class="rmid">
-        <div class="rname">Hotel Lumo Roma</div>
-        <div class="rmeta">Monti · 7-min walk to the Colosseum · 1,842 reviews</div>
-        <p class="rsumq"><span class="serif">“</span>Quiet rooms set back from the street, faultless staff, steps from the Forum.<span class="serif">”</span></p>
-        <div class="ribbon">
-          <div class="rib"><div class="nm">Safety <span class="wt">25%</span></div><div class="vl">9.4</div><div class="bar"><i data-v="9.4" style="width:94%"></i></div></div>
-          <div class="rib"><div class="nm">Quiet <span class="wt">25%</span></div><div class="vl">9.5</div><div class="bar"><i data-v="9.5" style="width:95%"></i></div></div>
-          <div class="rib"><div class="nm">Walk <span class="wt">20%</span></div><div class="vl">9.6</div><div class="bar"><i data-v="9.6" style="width:96%"></i></div></div>
-          <div class="rib"><div class="nm">Value <span class="wt">15%</span></div><div class="vl">8.6</div><div class="bar"><i data-v="8.6" style="width:86%"></i></div></div>
-          <div class="rib"><div class="nm">Clean <span class="wt">10%</span></div><div class="vl">9.5</div><div class="bar"><i data-v="9.5" style="width:95%"></i></div></div>
-          <div class="rib"><div class="nm">Family <span class="wt">5%</span></div><div class="vl">8.7</div><div class="bar"><i data-v="8.7" style="width:87%"></i></div></div>
-        </div>
-      </div>
-      <div class="rrail">
-        <div class="rbadge" data-v="9.3">9.3</div>
-        <div class="rblabel">Staylo fit <span class="info">i<span class="tip">Computed from Google + Booking reviews, weighted by the priorities you chose.</span></span></div>
-        <div class="rsrc">
-          <span class="src-row"><span class="src-glyph b">B</span><span class="src-line"><b>8.9</b></span></span>
-          <span class="src-row"><span class="src-glyph g">G</span><span class="src-line"><b>4.6</b></span></span>
-        </div>
-        <div class="rprice">€186<span> /night</span></div>
-        <a href="#" class="btn">View on Booking →</a>
-      </div>
-    </article>
+  <div class="wrap"><div class="map-card" id="mapWrap"><div id="hotelMap"></div></div></div>
 
-    <article class="rcard">
-      <div class="rthumb"><span class="rank">#2</span><div class="rthumb-ph" style="background:linear-gradient(135deg,#caf0f8,#a9d8e8)"></div></div>
-      <div class="rmid">
-        <div class="rname">Palazzo Undici</div>
-        <div class="rmeta">Celio · 9-min walk to the Colosseum · 1,204 reviews</div>
-        <p class="rsumq"><span class="serif">“</span>Charming boutique rooms and a calm courtyard; breakfast gets a special mention.<span class="serif">”</span></p>
-        <div class="ribbon">
-          <div class="rib"><div class="nm">Safety <span class="wt">25%</span></div><div class="vl">8.9</div><div class="bar"><i data-v="8.9" style="width:89%"></i></div></div>
-          <div class="rib"><div class="nm">Quiet <span class="wt">25%</span></div><div class="vl">8.6</div><div class="bar"><i data-v="8.6" style="width:86%"></i></div></div>
-          <div class="rib"><div class="nm">Walk <span class="wt">20%</span></div><div class="vl">9.1</div><div class="bar"><i data-v="9.1" style="width:91%"></i></div></div>
-          <div class="rib"><div class="nm">Value <span class="wt">15%</span></div><div class="vl">8.8</div><div class="bar"><i data-v="8.8" style="width:88%"></i></div></div>
-          <div class="rib"><div class="nm">Clean <span class="wt">10%</span></div><div class="vl">9.0</div><div class="bar"><i data-v="9.0" style="width:90%"></i></div></div>
-          <div class="rib"><div class="nm">Family <span class="wt">5%</span></div><div class="vl">8.4</div><div class="bar"><i data-v="8.4" style="width:84%"></i></div></div>
-        </div>
-      </div>
-      <div class="rrail">
-        <div class="rbadge" data-v="8.7">8.7</div>
-        <div class="rblabel">Staylo fit <span class="info">i<span class="tip">Computed from Google + Booking reviews, weighted by the priorities you chose.</span></span></div>
-        <div class="rsrc">
-          <span class="src-row"><span class="src-glyph b">B</span><span class="src-line"><b>8.5</b></span></span>
-          <span class="src-row"><span class="src-glyph g">G</span><span class="src-line"><b>4.4</b></span></span>
-        </div>
-        <div class="rprice">€164<span> /night</span></div>
-        <a href="#" class="btn">View on Booking →</a>
-      </div>
-    </article>
-
-    <article class="rcard">
-      <div class="rthumb"><span class="rank">#3</span><div class="rthumb-ph" style="background:linear-gradient(135deg,#dfeef0,#bee1e6)"></div></div>
-      <div class="rmid">
-        <div class="rname">Monti Garden Rooms</div>
-        <div class="rmeta">Monti · 11-min walk to the Colosseum · 968 reviews</div>
-        <p class="rsumq"><span class="serif">“</span>Great value in a lively area; some guests note evening noise from nearby bars.<span class="serif">”</span></p>
-        <div class="ribbon">
-          <div class="rib"><div class="nm">Safety <span class="wt">25%</span></div><div class="vl">8.3</div><div class="bar"><i data-v="8.3" style="width:83%"></i></div></div>
-          <div class="rib"><div class="nm">Quiet <span class="wt">25%</span></div><div class="vl">7.6</div><div class="bar"><i data-v="7.6" style="width:76%"></i></div></div>
-          <div class="rib"><div class="nm">Walk <span class="wt">20%</span></div><div class="vl">8.8</div><div class="bar"><i data-v="8.8" style="width:88%"></i></div></div>
-          <div class="rib"><div class="nm">Value <span class="wt">15%</span></div><div class="vl">9.2</div><div class="bar"><i data-v="9.2" style="width:92%"></i></div></div>
-          <div class="rib"><div class="nm">Clean <span class="wt">10%</span></div><div class="vl">8.6</div><div class="bar"><i data-v="8.6" style="width:86%"></i></div></div>
-          <div class="rib"><div class="nm">Family <span class="wt">5%</span></div><div class="vl">8.0</div><div class="bar"><i data-v="8.0" style="width:80%"></i></div></div>
-        </div>
-      </div>
-      <div class="rrail">
-        <div class="rbadge" data-v="8.1">8.1</div>
-        <div class="rblabel">Staylo fit <span class="info">i<span class="tip">Computed from Google + Booking reviews, weighted by the priorities you chose.</span></span></div>
-        <div class="rsrc">
-          <span class="src-row"><span class="src-glyph b">B</span><span class="src-line"><b>8.2</b></span></span>
-          <span class="src-row"><span class="src-glyph g">G</span><span class="src-line"><b>4.3</b></span></span>
-        </div>
-        <div class="rprice">€132<span> /night</span></div>
-        <a href="#" class="btn">View on Booking →</a>
-      </div>
-    </article>
-  </div>
+  <div class="results wrap" id="resultsList"></div>
 
   <div class="sky-extend"></div>
 </div>
@@ -380,8 +313,8 @@ const BODY = `
 <!-- ===== FOOTER ===== -->
 <footer>
   <div class="footer-row">
-    <a href="/landing.html" class="logo"><span class="w" style="font-size:24px">stayl</span><span class="sq" style="width:26px;height:26px"><span class="h l"></span><span class="h r"></span><span class="o oL" style="font-size:20px">o</span><span class="o oR" style="font-size:20px">o</span></span></a>
-    <span style="font-size:11.5px;">© 2026 Staylo · Powered by Booking.com inventory</span>
+    <a href="/" class="logo"><span class="w" style="font-size:24px">stayl</span><span class="sq" style="width:26px;height:26px"><span class="h l"></span><span class="h r"></span><span class="o oL" style="font-size:20px">o</span><span class="o oR" style="font-size:20px">o</span></span></a>
+    <span style="font-size:11.5px;">© 2026 Staylo · Reviews from Google &amp; Tripadvisor · Bookings via Booking.com</span>
   </div>
 </footer>
 `;
@@ -462,20 +395,420 @@ export default function ResultPage() {
       });
     }
     paintAll();
+    wireAuthNav();
 
-    /* ---------- blue score scale: deepest = best, fading lighter ---------- */
-    function blueScale(v) {
-      const stops = [[7.0, [144, 224, 239]], [7.8, [72, 202, 228]], [8.4, [0, 180, 216]],
-                     [8.9, [0, 119, 182]], [9.3, [3, 69, 122]], [9.7, [3, 4, 94]]];
-      v = Math.max(stops[0][0], Math.min(stops[stops.length - 1][0], v));
-      let a = stops[0], b = stops[stops.length - 1];
-      for (let i = 0; i < stops.length - 1; i++) { if (v >= stops[i][0] && v <= stops[i + 1][0]) { a = stops[i]; b = stops[i + 1]; break; } }
-      const t = (v - a[0]) / ((b[0] - a[0]) || 1);
-      const c = a[1].map((x, i) => Math.round(x + (b[1][i] - x) * t));
-      return `rgb(${c[0]},${c[1]},${c[2]})`;
+    /* ---------- fetch real hotels from /api/hotels using search → filters data ---------- */
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const safePhotoUrl = (url) => (typeof url === "string" && /^https:\/\//.test(url)) ? url.replace(/'/g, "%27") : null;
+
+    const resultsEl = document.getElementById("resultsList");
+
+    /* ---------- favorites (Hafta 7): kalp durumlarını doldur + toggle ---------- */
+    // Girişsizse GET 401 döner → hearts boş kalır, tıklayınca /login'e yönlendiririz.
+    async function setupFavorites(hotels) {
+      const hotelsById = {};
+      hotels.forEach((h) => { hotelsById[String(h.id)] = h; });
+      let loggedIn = true;
+      const favset = new Set();
+      try {
+        const res = await fetch("/api/favorites");
+        if (res.status === 401) loggedIn = false;
+        else if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          (data.favorites || []).forEach((f) => favset.add(String(f.hotel_id)));
+        }
+      } catch (e) {}
+      if (cancelled) return;
+      document.querySelectorAll(".rcard").forEach((card) => {
+        const id = card.getAttribute("data-hotel-id");
+        const btn = card.querySelector(".rfav");
+        if (btn && favset.has(String(id))) btn.classList.add("on");
+      });
+      if (!resultsEl) return;
+      resultsEl.addEventListener("click", async (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest(".rfav") : null;
+        if (!btn) return;
+        const card = btn.closest(".rcard");
+        const id = card && card.getAttribute("data-hotel-id");
+        if (!id) return;
+        if (!loggedIn) { window.location.href = "/login?next=/results"; return; }
+        if (btn.disabled) return;
+        const wasOn = btn.classList.contains("on");
+        btn.classList.toggle("on"); // iyimser
+        btn.disabled = true;
+        try {
+          if (wasOn) {
+            await fetch(`/api/favorites?hotelId=${encodeURIComponent(id)}`, { method: "DELETE" });
+          } else {
+            const h = hotelsById[String(id)] || {};
+            const body = {
+              hotelId: String(id),
+              hotelName: h.name ? String(h.name) : null,
+              city: F && F.city ? String(F.city) : null,
+              country: F && F.country ? String(F.country) : null,
+              photoUrl: safePhotoUrl(h.photo),
+              priceAmount: h.price ? h.price.amount : null,
+              priceCurrency: h.price ? h.price.currency : null,
+              fitScore: h.score && typeof h.score.fit === "number" ? h.score.fit : null,
+            };
+            const r = await fetch("/api/favorites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            if (r.status === 401) { window.location.href = "/login?next=/results"; return; }
+          }
+        } catch (err) {
+          btn.classList.toggle("on"); // hata → geri al
+        } finally {
+          btn.disabled = false;
+        }
+      });
     }
-    document.querySelectorAll('.rbadge[data-v]').forEach(el => { el.style.background = blueScale(parseFloat(el.dataset.v)); });
-    document.querySelectorAll('.rib .bar i[data-v]').forEach(el => { el.style.background = blueScale(parseFloat(el.dataset.v)); });
+    function renderMessage(text, isError) {
+      if (!resultsEl) return;
+      resultsEl.innerHTML = `<section class="card"><div class="card-pad" style="text-align:center;padding:54px 34px;">
+        <p style="margin:0;font-size:15px;color:${isError ? "#d94030" : "var(--muted)"}">${esc(text)}</p>
+      </div></section>`;
+    }
+    /* ---------- score UI helpers ---------- */
+    // 6 kriter — API'deki WEIGHTED_CRITERIA ile birebir aynı anahtarlar, kısa etiketler.
+    const CRIT = [
+      ["safety", "Safety"], ["quiet", "Quiet"], ["family", "Family"],
+      ["value", "Value"], ["walkability", "Walk"], ["cleanliness", "Clean"],
+    ];
+    // F henüz bu noktada tanımlı değil (aşağıda) — default'la başlat, F okununca güncelle.
+    let WEIGHTS = { safety: 20, quiet: 20, family: 10, value: 25, walkability: 15, cleanliness: 10 };
+    const fmtScore = (v) => (Math.round(v * 10) / 10).toFixed(1);
+    const fmtCount = (n) => {
+      if (typeof n !== "number" || !isFinite(n) || n <= 0) return "";
+      return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n);
+    };
+    function barColor(v) {
+      if (v >= 8) return "#0096c7";
+      if (v >= 6) return "#00b4d8";
+      if (v >= 4) return "#48cae4";
+      return "#9fb4c2";
+    }
+    function fitBg(v) {
+      if (v >= 8) return "linear-gradient(150deg,#0096c7,#03457a)";
+      if (v >= 6.5) return "linear-gradient(150deg,#00b4d8,#0077b6)";
+      if (v >= 5) return "linear-gradient(150deg,#48cae4,#0096c7)";
+      return "linear-gradient(150deg,#8ca6b5,#5f7688)";
+    }
+    function ribbonHtml(criteria) {
+      if (!criteria || typeof criteria !== "object") return "";
+      const cells = CRIT.map(([k, label]) => {
+        const v = typeof criteria[k] === "number" ? criteria[k] : null;
+        const pct = v == null ? 0 : Math.max(0, Math.min(100, v * 10));
+        const w = typeof WEIGHTS[k] === "number" ? WEIGHTS[k] : 0;
+        const col = v == null ? "#cfdbe4" : barColor(v);
+        return `<div class="rib">
+          <div class="nm"><span>${label}</span><span class="wt">${w}%</span></div>
+          <div class="vl">${v == null ? "–" : fmtScore(v)}</div>
+          <div class="bar"><i style="width:${pct}%;background:${col};"></i></div>
+        </div>`;
+      }).join("");
+      return `<div class="ribbon">${cells}</div>`;
+    }
+    // Tripadvisor owl (Ollie) — Display Requirements: kaynak atfı için logo zorunlu.
+    const taOwl = `<svg width="24" height="15" viewBox="0 0 42 24" aria-label="Tripadvisor" style="flex:0 0 auto">
+      <circle cx="12" cy="12" r="11" fill="#00aa6c"></circle>
+      <circle cx="30" cy="12" r="11" fill="#00aa6c"></circle>
+      <circle cx="12" cy="12" r="6.6" fill="#fff"></circle>
+      <circle cx="30" cy="12" r="6.6" fill="#fff"></circle>
+      <circle cx="12" cy="12" r="3" fill="#004f32"></circle>
+      <circle cx="30" cy="12" r="3" fill="#004f32"></circle>
+      <path d="M17 12 L25 12 L21 18 Z" fill="#00aa6c"></path>
+    </svg>`;
+    let BUBID = 0;
+    // Tripadvisor bubble rating (5 baloncuk, orana göre yeşil dolgu) — zorunlu atıf biçimi.
+    function taBubbles(rating) {
+      const n = 5, r = 3.4, gap = 9.2, pad = r;
+      const cx = (i) => pad + gap * i;
+      const w = cx(n - 1) + r, h = 2 * r;
+      const frac = Math.max(0, Math.min(1, rating / 5));
+      const id = "tab" + (BUBID++);
+      let empty = "", full = "";
+      for (let i = 0; i < n; i++) {
+        empty += `<circle cx="${cx(i)}" cy="${r}" r="${r}" fill="#d4dde2"></circle>`;
+        full += `<circle cx="${cx(i)}" cy="${r}" r="${r}" fill="#00aa6c"></circle>`;
+      }
+      return `<svg width="${(w * 1.7).toFixed(0)}" height="${(h * 1.7).toFixed(0)}" viewBox="0 0 ${w.toFixed(1)} ${h.toFixed(1)}" style="flex:0 0 auto">
+        <defs><clipPath id="${id}"><rect x="0" y="0" width="${(w * frac).toFixed(2)}" height="${h}"></rect></clipPath></defs>
+        ${empty}
+        <g clip-path="url(#${id})">${full}</g>
+      </svg>`;
+    }
+    function sourcesHtml(sources) {
+      if (!sources || typeof sources !== "object") return "";
+      const rows = [];
+      const g = sources.google;
+      if (g && typeof g.rating === "number") {
+        const cnt = fmtCount(g.reviewCount);
+        rows.push(`<div class="src-row" title="Rating from Google">
+          <span class="src-glyph g">G</span>
+          <span class="src-line"><b>${fmtScore(g.rating)}</b>★${cnt ? `<span style="color:var(--muted);font-size:11px;margin-left:3px;">${cnt}</span>` : ""}</span>
+        </div>`);
+      }
+      const t = sources.tripadvisor;
+      if (t && typeof t.rating === "number") {
+        // Tripadvisor eşleşmesi yoksa bu satır hiç render edilmez → sadece Google gösterilir, kırılma olmaz.
+        const cnt = fmtCount(t.reviewCount);
+        rows.push(`<div class="src-row" title="Rating from Tripadvisor">
+          ${taOwl}${taBubbles(t.rating)}
+          <span class="src-line"><b>${fmtScore(t.rating)}</b>${cnt ? `<span style="color:var(--muted);font-size:11px;margin-left:3px;">${cnt}</span>` : ""}</span>
+        </div>`);
+      }
+      if (!rows.length) return "";
+      return `<div class="rsrc" style="flex-direction:column;align-items:stretch;gap:9px;">${rows.join("")}</div>`;
+    }
+
+    /* ---------- header: bind to real search + result data ---------- */
+    const ADJUST_BTN = `<a href="/filters" class="adjust-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"></path></svg>Adjust priorities</a>`;
+    const currencySymbol = (c) => ({ EUR: "€", USD: "$", GBP: "£", TRY: "₺" }[c] || (c ? c + " " : "€"));
+    function formatDateRange(ci, co) {
+      if (!ci || !co) return null;
+      const a = new Date(ci + "T00:00:00"), b = new Date(co + "T00:00:00");
+      if (isNaN(a) || isNaN(b)) return null;
+      const opt = { month: "short", day: "numeric" };
+      return a.toLocaleDateString("en-US", opt) + " – " + b.toLocaleDateString("en-US", opt);
+    }
+    function formatBudget(bud) {
+      if (!bud) return null;
+      const s = currencySymbol(bud.currency || "EUR");
+      const min = typeof bud.min === "number" ? bud.min : null;
+      const max = typeof bud.max === "number" ? bud.max : null;
+      if (min != null && max != null) return `${s}${Math.round(min)}–${s}${Math.round(max)}`;
+      if (max != null) return `Under ${s}${Math.round(max)}`;
+      if (min != null) return `From ${s}${Math.round(min)}`;
+      return null;
+    }
+    // Toplam yorum sayısını 100'e yuvarlayıp "+" ile göster ("12,400+").
+    function fmtReviews(n) {
+      if (!n || n <= 0) return null;
+      return (Math.floor(n / 100) * 100).toLocaleString("en-US") + "+";
+    }
+    // hotelList null → arama sürüyor (sadece şehir/çipler); dolu → gerçek sayılar.
+    function renderHeader(hotelList) {
+      const city = (F && F.city) ? String(F.city) : "";
+      const hEl = document.getElementById("rHeadline");
+      if (hEl) hEl.innerHTML = city ? `Your ranked stays in <span class="stamp">${esc(city)}</span>.` : `Your ranked stays.`;
+
+      const chips = [];
+      const dr = formatDateRange(F && F.checkIn, F && F.checkOut);
+      if (dr) chips.push(`<span class="wtag">${esc(dr)}</span>`);
+      const guests = (F && Number(F.guests)) || 0;
+      if (guests > 0) chips.push(`<span class="wtag">${guests} ${guests === 1 ? "guest" : "guests"}</span>`);
+      const bud = formatBudget(F && F.budget);
+      if (bud) chips.push(`<span class="wtag">${esc(bud)}</span>`);
+      const fEl = document.getElementById("rFilters");
+      if (fEl) fEl.innerHTML = chips.join("") + ADJUST_BTN;
+
+      const sEl = document.getElementById("rSub");
+      if (!sEl) return;
+      if (!hotelList) { sEl.textContent = "Scoring hotels on your priorities…"; return; }
+      // Gerçek toplam yorum: her otelin Google + Tripadvisor count'ları (elimizdeki veriden).
+      let totalReviews = 0;
+      for (const h of hotelList) {
+        const s = h.sources || {};
+        if (s.google && typeof s.google.reviewCount === "number") totalReviews += s.google.reviewCount;
+        if (s.tripadvisor && typeof s.tripadvisor.reviewCount === "number") totalReviews += s.tripadvisor.reviewCount;
+      }
+      const n = hotelList.length;
+      const hotelTxt = `<b>${n} ${n === 1 ? "hotel" : "hotels"}</b>${city ? ` in ${esc(city)}` : ""}`;
+      const rev = fmtReviews(totalReviews);
+      sEl.innerHTML = rev
+        ? `Based on <b>${rev} reviews</b> from Google &amp; Tripadvisor across ${hotelTxt}, scored on your priorities.`
+        : `Scored ${hotelTxt} on your priorities.`;
+    }
+
+    function hotelCardHtml(h, rank) {
+      const photo = safePhotoUrl(h.photo);
+      const thumbStyle = photo
+        ? `background-image:url('${photo}');background-size:cover;background-position:center;`
+        : `background:linear-gradient(135deg,#bee1e6,#90e0ef);`;
+      const priceHtml = h.price
+        ? `€${Math.round(h.price.amount)}<span> /night</span>`
+        : `<span style="font-size:13px;color:var(--muted);">Price unavailable</span>`;
+      const distHtml = h.distanceToCenter
+        ? `<div class="rdist">${esc(h.distanceToCenter)} to city center</div>`
+        : "";
+      const nearbyHtml = Array.isArray(h.nearbyAttractions) && h.nearbyAttractions.length
+        ? `<div class="rnearby">${h.nearbyAttractions.map((a) => `${esc(a.name)} <b>${esc(a.distance)}</b>`).join(" · ")}</div>`
+        : "";
+      const score = h.score || null;
+      const summaryHtml = score && score.summary
+        ? `<div class="rsumq">${esc(score.summary)}</div>`
+        : "";
+      const ribbon = score ? ribbonHtml(score.criteria) : "";
+      // Belirgin Staylo fit rozeti — skor yoksa (analiz gelmediyse) rozet gizlenir, kart kırılmaz.
+      const fit = score && typeof score.fit === "number" ? score.fit : null;
+      const badgeHtml = fit != null
+        ? `<div class="rbadge" style="background:${fitBg(fit)}">${fmtScore(fit)}</div>
+           <div class="rblabel">Staylo fit
+             <span class="info">i<span class="tip">Weighted 0–10 score built from guest reviews across Google &amp; Tripadvisor, matched to your priorities.</span></span>
+           </div>`
+        : "";
+      const sources = sourcesHtml(h.sources);
+      // "View on Booking" → /api/redirect (server logs click + 302 to Booking deep-link).
+      // target=_blank YOK (roadmap kuralı) — aynı sekmede gider.
+      const rp = new URLSearchParams();
+      rp.set("hotel", String(h.id ?? ""));
+      if (h.name) rp.set("name", String(h.name));
+      if (F && F.city) rp.set("city", String(F.city));
+      if (F && F.checkIn) rp.set("checkIn", String(F.checkIn));
+      if (F && F.checkOut) rp.set("checkOut", String(F.checkOut));
+      if (F && F.guests) rp.set("guests", String(F.guests));
+      const bookingHref = "/api/redirect?" + rp.toString();
+      return `<article class="rcard" data-hotel-id="${esc(h.id)}">
+        <div class="rthumb"><div class="rthumb-ph" style="${thumbStyle}"></div><div class="rank">${rank}</div>
+          <button class="rfav" type="button" aria-label="Save hotel"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.3C.6 8.9 2 5.5 5.2 5.5c1.9 0 3.2 1.1 3.8 2.3h.1c.6-1.2 1.9-2.3 3.8-2.3 3.2 0 4.6 3.4 3.2 6.2C19.5 16.4 12 21 12 21z"/></svg></button>
+        </div>
+        <div class="rmid">
+          <div class="rname">${esc(h.name)}</div>
+          <div class="rmeta">${esc(h.address || "")}</div>
+          ${distHtml}
+          ${nearbyHtml}
+          ${summaryHtml}
+          ${ribbon}
+        </div>
+        <div class="rrail">
+          ${badgeHtml}
+          ${sources}
+          <div class="rprice">${priceHtml}</div>
+          <a class="btn" href="${esc(bookingHref)}" rel="nofollow sponsored">View on Booking</a>
+        </div>
+      </article>`;
+    }
+
+    /* ---------- Mapbox GL: one pin per hotel with coordinates ---------- */
+    // `cancelled` guards against React StrictMode's double effect-invoke in dev
+    // (mount → cleanup → mount again) racing two fetches/maps into the same DOM.
+    let cancelled = false;
+    const mapWrapEl = document.getElementById("mapWrap");
+    let mapInstance = null;
+
+    function hideMap() {
+      if (mapWrapEl) mapWrapEl.style.display = "none";
+    }
+    function showMapMessage(text) {
+      if (!mapWrapEl) return;
+      if (mapInstance) { try { mapInstance.remove(); } catch (e) {} mapInstance = null; }
+      mapWrapEl.style.display = "block";
+      mapWrapEl.innerHTML = `<div class="map-msg">${esc(text)}</div>`;
+    }
+    function highlightCard(id) {
+      document.querySelectorAll(".rcard.highlight").forEach((el) => el.classList.remove("highlight"));
+      const card = document.querySelector(`.rcard[data-hotel-id="${window.CSS && CSS.escape ? CSS.escape(String(id)) : id}"]`);
+      if (card) card.classList.add("highlight");
+    }
+    // Otellerin nearbyAttractions'ları çakışır (aynı yer birden fazla otele yakın olabilir) — tekilleştir.
+    function collectAttractions(hotelList) {
+      const seen = new Set();
+      const list = [];
+      hotelList.forEach((h) => {
+        (h.nearbyAttractions || []).forEach((a) => {
+          if (typeof a.latitude !== "number" || typeof a.longitude !== "number") return;
+          const key = `${a.name}|${a.latitude.toFixed(5)}|${a.longitude.toFixed(5)}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          list.push(a);
+        });
+      });
+      return list;
+    }
+    async function initMap(hotelList) {
+      const withCoords = hotelList.filter((h) => typeof h.latitude === "number" && typeof h.longitude === "number");
+      if (!withCoords.length) { hideMap(); return; }
+      const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+      if (!token) { showMapMessage("Map is unavailable right now."); return; }
+      try {
+        const mapboxgl = (await import("mapbox-gl")).default;
+        if (cancelled) return;
+        if (mapWrapEl) { mapWrapEl.style.display = "block"; mapWrapEl.innerHTML = '<div id="hotelMap"></div>'; }
+        mapboxgl.accessToken = token;
+        const map = new mapboxgl.Map({
+          container: "hotelMap",
+          style: "mapbox://styles/mapbox/light-v11",
+          center: [withCoords[0].longitude, withCoords[0].latitude],
+          zoom: 12,
+        });
+        mapInstance = map;
+        map.addControl(new mapboxgl.NavigationControl(), "top-right");
+        map.on("error", (e) => {
+          console.error("Mapbox error:", e && e.error);
+          if (!cancelled) showMapMessage("Map couldn't be loaded.");
+        });
+        map.on("load", () => {
+          if (cancelled || mapInstance !== map) return; // stale/removed instance
+          const bounds = new mapboxgl.LngLatBounds();
+          withCoords.forEach((h) => {
+            const marker = new mapboxgl.Marker({ color: "#0077b6" }).setLngLat([h.longitude, h.latitude]).addTo(map);
+            const el = marker.getElement();
+            el.style.cursor = "pointer";
+            el.addEventListener("click", () => highlightCard(h.id));
+            bounds.extend([h.longitude, h.latitude]);
+          });
+          const attractions = collectAttractions(hotelList);
+          attractions.forEach((a) => {
+            const marker = new mapboxgl.Marker({ color: "#f59e0b" })
+              .setLngLat([a.longitude, a.latitude])
+              .setPopup(new mapboxgl.Popup({ offset: 18, closeButton: false }).setText(a.name))
+              .addTo(map);
+            marker.getElement().style.cursor = "pointer";
+            bounds.extend([a.longitude, a.latitude]);
+          });
+          if (withCoords.length + attractions.length > 1) {
+            map.fitBounds(bounds, { padding: 48, maxZoom: 15, duration: 0 });
+          }
+        });
+      } catch (err) {
+        console.error("Mapbox init failed:", err);
+        if (!cancelled) showMapMessage("Map couldn't be loaded.");
+      }
+    }
+
+    let SD = null;
+    try { SD = JSON.parse(sessionStorage.getItem("staylo_search") || "null"); } catch (e) { SD = null; }
+    const F = SD && SD.filters ? SD.filters : null;
+    if (F && F.weights && typeof F.weights === "object") WEIGHTS = F.weights;
+    if (!F) { window.location.replace("/search"); }
+    else {
+      renderMessage("Searching for hotels…", false);
+      renderHeader(null);
+      hideMap();
+      const payload = {
+        checkIn: F.checkIn,
+        checkOut: F.checkOut,
+        guests: F.guests || 2,
+        city: F.city,
+        country: F.country,
+      };
+      if (F.weights && typeof F.weights === "object") payload.weights = F.weights;
+      if (F.budget && (F.budget.min != null || F.budget.max != null)) {
+        payload.budget = { min: F.budget.min, max: F.budget.max, currency: F.budget.currency || "EUR" };
+      }
+      const controller = new AbortController();
+      fetch("/api/hotels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: controller.signal })
+        .then(async (res) => {
+          if (cancelled) return;
+          const data = await res.json().catch(() => ({}));
+          if (cancelled) return;
+          if (!res.ok) { renderMessage("We couldn't fetch hotels right now. Please try again in a moment.", true); hideMap(); return; }
+          const hotels = Array.isArray(data.hotels) ? data.hotels : [];
+          if (!hotels.length) { renderMessage("No hotels found for this search. Try adjusting your dates or budget.", false); hideMap(); return; }
+          if (resultsEl) resultsEl.innerHTML = hotels.map((h, i) => hotelCardHtml(h, i + 1)).join("");
+          renderHeader(hotels);
+          setupFavorites(hotels);
+          initMap(hotels);
+        })
+        .catch((err) => { if (!cancelled && err.name !== "AbortError") renderMessage("Network error. Please check your connection and try again.", true); if (!cancelled) hideMap(); });
+
+      return () => {
+        cancelled = true;
+        controller.abort();
+        if (mapInstance) { try { mapInstance.remove(); } catch (e) {} mapInstance = null; }
+      };
+    }
+
+    return () => { cancelled = true; if (mapInstance) { try { mapInstance.remove(); } catch (e) {} mapInstance = null; } };
     /* eslint-enable */
   }, []);
 

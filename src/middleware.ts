@@ -32,14 +32,32 @@ export async function updateSession(request: NextRequest) {
   return { supabaseResponse, user }
 }
 
+// Auth gerektiren path'ler (Hafta 7). Diğer her şey (/, /search, /filters,
+// /results, /login, /auth/callback) public — arama akışı girişsiz çalışır.
+const PROTECTED_PREFIXES = ['/saved']
+
 // ↓↓↓ EKSİK OLAN KISIM — Next'in middleware'i bu
 export async function middleware(request: NextRequest) {
-  const { supabaseResponse } = await updateSession(request)
+  const { supabaseResponse, user } = await updateSession(request)
+
+  const path = request.nextUrl.pathname
+  const isProtected = PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))
+  if (isProtected && !user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    url.search = ''
+    url.searchParams.set('next', path)
+    const redirect = NextResponse.redirect(url)
+    // Session cookie tazelemesini (updateSession) redirect'e taşı ki kaybolmasın.
+    supabaseResponse.cookies.getAll().forEach((c) => redirect.cookies.set(c))
+    return redirect
+  }
+
   return supabaseResponse
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|landing.html|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
