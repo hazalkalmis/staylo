@@ -5,11 +5,12 @@ import 'server-only'
 // Widget /search sayfasında (managed mode) token üretir, biz burada
 // siteverify ile server-side doğrularız.
 //
-// Fail-safe kuralları (mevcut projedeki fail-open desenlerle tutarlı):
-//  - TURNSTILE_SECRET_KEY env'i yoksa (ör. yerel geliştirme) → doğrulamayı
-//    ATLA (fail-open). Honeypot yine de birinci katman olarak çalışır.
-//  - Cloudflare'e ağ hatası/timeout → fail-open + hata logla (Cloudflare
-//    kesintisi yüzünden arama tamamen durmasın; honeypot zaten devrede).
+// Kurallar:
+//  - TURNSTILE_SECRET_KEY env'i yoksa → fail-CLOSED (reddet). Bir environment'a
+//    secret eklemeyi unutursak bot koruması SESSİZCE devre dışı kalmasın; secret
+//    yoksa geçiş verme (CRON_SECRET'taki desenle aynı). Sunucuda net logla.
+//  - Cloudflare'e ağ hatası/timeout → fail-OPEN + hata logla (Cloudflare
+//    kesintisi yüzünden arama tamamen durmasın; honeypot birinci katman devrede).
 //  - Cloudflare açıkça "success: false" derse → fail-CLOSED (reddet).
 //    Bu, gerçek bir bot/geçersiz token tespiti — atlanmaz.
 // ----------------------------------------------------------------------------
@@ -19,7 +20,12 @@ const FETCH_TIMEOUT_MS = 8_000
 
 export async function verifyTurnstile(token: string, remoteIp: string): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY
-  if (!secret) return true // yapılandırılmamış — fail-open
+  if (!secret) {
+    // ⚠️ Güvenlik: yapılandırılmamış → fail-CLOSED. Secret'ı unutmak bot korumasını
+    // sessizce kapatmasın. (Bu env'e TURNSTILE_SECRET_KEY eklenmeli.)
+    console.error('TURNSTILE_SECRET_KEY missing — blocking request (fail-closed). Add it to this environment.')
+    return false
+  }
 
   if (!token) return false // secret var ama client token göndermedi → reddet
 

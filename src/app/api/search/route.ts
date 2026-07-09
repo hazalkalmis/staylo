@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3) Gemini ile NL → JSON
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' })
     const prompt = `Extract hotel search filters from this query. Return ONLY valid JSON, no markdown, no explanation.
 
 Query: "${query}"
