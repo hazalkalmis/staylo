@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { wireAuthNav } from "@/lib/authNav";
 
 const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
 
@@ -194,15 +195,15 @@ const BODY = `
 <!-- ===== NAV ===== -->
 <nav>
   <div class="nav-row">
-    <a href="/landing.html" class="logo"><span class="w">stayl</span><span class="sq"><span class="h l"></span><span class="h r"></span><span class="o oL">o</span><span class="o oR">o</span></span></a>
+    <a href="/" class="logo"><span class="w">stayl</span><span class="sq"><span class="h l"></span><span class="h r"></span><span class="o oL">o</span><span class="o oR">o</span></span></a>
     <div class="nav-links">
-      <a href="/landing.html#how">How it works</a>
-      <a href="/landing.html#score">The score</a>
-      <a href="/landing.html#faq">FAQ</a>
+      <a href="/#how">How it works</a>
+      <a href="/#score">The score</a>
+      <a href="/#faq">FAQ</a>
     </div>
     <div class="nav-right">
-      <a href="#" class="login">Log in</a>
-      <a href="#" class="btn">Saved</a>
+      <a href="/login" class="login">Log in</a>
+      <a href="/saved" class="btn">Saved</a>
     </div>
   </div>
 </nav>
@@ -303,8 +304,8 @@ const BODY = `
 <!-- ===== FOOTER ===== -->
 <footer>
   <div class="footer-row">
-    <a href="/landing.html" class="logo"><span class="w" style="font-size:24px">stayl</span><span class="sq" style="width:26px;height:26px"><span class="h l"></span><span class="h r"></span><span class="o oL" style="font-size:20px">o</span><span class="o oR" style="font-size:20px">o</span></span></a>
-    <span style="font-size:11.5px;">© 2026 Staylo · Powered by Booking.com inventory</span>
+    <a href="/" class="logo"><span class="w" style="font-size:24px">stayl</span><span class="sq" style="width:26px;height:26px"><span class="h l"></span><span class="h r"></span><span class="o oL" style="font-size:20px">o</span><span class="o oR" style="font-size:20px">o</span></span></a>
+    <span style="font-size:11.5px;">© 2026 Staylo · Reviews from Google &amp; Tripadvisor · Bookings via Booking.com</span>
   </div>
 </footer>
 `;
@@ -721,6 +722,7 @@ export default function ConfirmPage() {
       });
     }
     paintAll();
+    wireAuthNav();
 
     return () => { tagCleanups.forEach(fn => fn()); };
     /* eslint-enable */
