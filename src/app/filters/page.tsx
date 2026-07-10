@@ -555,10 +555,12 @@ export default function ConfirmPage() {
     const cityStr = [F.city, F.country].filter(Boolean).join(", ");
     const cityInput = fieldByLabel("city"); if (cityInput && cityStr) cityInput.value = cityStr;
     const guestsInput = fieldByLabel("guests"); if (guestsInput && F.guests) guestsInput.value = F.guests + (F.guests > 1 ? " adults" : " adult");
-    const ciInput = fieldByLabel("check in"); if (ciInput && F.checkIn) ciInput.value = F.checkIn;
-    const coInput = fieldByLabel("check out"); if (coInput && F.checkOut) coInput.value = F.checkOut;
-    const minInput = fieldByLabel("min budget"); if (minInput && F.budget && F.budget.min != null) minInput.value = F.budget.min;
-    const maxInput = fieldByLabel("max budget"); if (maxInput && F.budget && F.budget.max != null) maxInput.value = F.budget.max;
+    // F'de değer yoksa alanı TEMİZLE (HTML'deki hardcoded 12.09.2026/90/180
+    // placeholder-default'ları kalmasın → persist edilince sahte filtre olmasın).
+    const ciInput = fieldByLabel("check in"); if (ciInput) ciInput.value = F.checkIn || "";
+    const coInput = fieldByLabel("check out"); if (coInput) coInput.value = F.checkOut || "";
+    const minInput = fieldByLabel("min budget"); if (minInput) minInput.value = (F.budget && F.budget.min != null) ? F.budget.min : "";
+    const maxInput = fieldByLabel("max budget"); if (maxInput) maxInput.value = (F.budget && F.budget.max != null) ? F.budget.max : "";
 
     // title + city stamp (localized)
     const h1El = document.querySelector("header.head h1");
@@ -649,6 +651,44 @@ export default function ConfirmPage() {
     // localized slider labels
     if (T.w) { WEIGHTS.forEach(w => { if (T.w[w.id]) { w.label = T.w[w.id][0]; w.hint = T.w[w.id][1]; } }); }
     renderWeights();
+
+    /* ---------- Hafta 7: filters düzenlemelerini sessionStorage'a yaz (Find'e basınca) ---------- */
+    // Eskiden "Find hotels →" düz linkti → tarih/guests/budget/weight düzenlemeleri
+    // kayboluyordu (/results orijinal arama F'sini okuyordu). Şimdi tıklamada güncel
+    // alanları F'ye merge edip yazıyoruz; ardından link /results'a gider. Tarih formatı
+    // geçersizse null yazılır → /api/hotels server-side default'a düşer.
+    (function persistCriteriaOnFind(){
+      const findBtn = document.querySelector(".actions .btn:not(.btn--ghost)");
+      if (!findBtn || !SD) return;
+      findBtn.addEventListener("click", function(){
+        // Hem YYYY-MM-DD hem DD.MM.YYYY (alan placeholder'ı) kabul et; YYYY-MM-DD'ye normalize et.
+        const parseDate = (v) => {
+          const s = String(v || "").trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+          return m ? (m[3] + "-" + m[2] + "-" + m[1]) : null;
+        };
+        const wmap = { safety:"safety", quiet:"quiet", walk:"walkability", value:"value", clean:"cleanliness", family:"family" };
+        const weights = {};
+        WEIGHTS.forEach(w => { const k = wmap[w.id]; if (k) weights[k] = w.w; });
+        const g = parseInt(String((guestsInput && guestsInput.value) || "").replace(/[^0-9]/g, ""), 10);
+        const minV = (minInput && String(minInput.value).trim() !== "") ? Number(minInput.value) : null;
+        const maxV = (maxInput && String(maxInput.value).trim() !== "") ? Number(maxInput.value) : null;
+        SD.filters = Object.assign({}, F, {
+          checkIn: parseDate(ciInput && ciInput.value),
+          checkOut: parseDate(coInput && coInput.value),
+          guests: (Number.isFinite(g) && g > 0) ? g : (F.guests || 2),
+          budget: {
+            min: (minV != null && Number.isFinite(minV)) ? minV : null,
+            max: (maxV != null && Number.isFinite(maxV)) ? maxV : null,
+            currency: (F.budget && F.budget.currency) || "EUR",
+          },
+          weights: weights,
+        });
+        SD.ts = Date.now();
+        try { sessionStorage.setItem("staylo_search", JSON.stringify(SD)); } catch(e) {}
+      });
+    })();
 
     /* ---------- clouds ---------- */
     let UID = 0;
