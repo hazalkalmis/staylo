@@ -171,6 +171,13 @@ export default function SearchPage() {
       } catch (e) {}
       return turnstileToken || "";
     }
+    // Turnstile token'ları TEK KULLANIMLIK — siteverify onu tükettikten sonra aynı
+    // token'la ikinci istek "Verification failed" verir. Her denemeden sonra widget'ı
+    // reset edip taze token aldır (managed mode yeni token'ı callback ile set eder).
+    function resetTurnstile(){
+      try { if (window.turnstile && typeof window.turnstile.reset === "function") window.turnstile.reset(); } catch (e) {}
+      turnstileToken = "";
+    }
 
     /* ---------- search -> /api/search -> /filters ---------- */
     const ta = document.querySelector(".searchbox textarea");
@@ -192,10 +199,10 @@ export default function SearchPage() {
       try{
         const res = await fetch("/api/search", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ query, hp: hpEl ? hpEl.value : "", turnstileToken: tsToken }) });
         const data = await res.json().catch(()=>({}));
-        if(!res.ok){ setHint(data.error || "Something went wrong. Please try again.", true); busy = false; resetBtn(); return; }
+        if(!res.ok){ setHint(data.error || "Something went wrong. Please try again.", true); busy = false; resetBtn(); resetTurnstile(); return; }
         sessionStorage.setItem("staylo_search", JSON.stringify({ query, filters: data.filters, ts: Date.now() }));
         window.location.assign("/filters");
-      }catch(e){ setHint("Network error. Please try again.", true); busy = false; resetBtn(); }
+      }catch(e){ setHint("Network error. Please try again.", true); busy = false; resetBtn(); resetTurnstile(); }
     }
     if(btn) btn.addEventListener("click", runSearch);
     if(ta) ta.addEventListener("keydown", (e)=>{ if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); runSearch(); } });
