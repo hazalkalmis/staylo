@@ -134,15 +134,25 @@ Rules:
       const result = await model.generateContent(prompt)
       text = result.response.text()
     } catch (err: any) {
-      // ⚠️ Gemini kota/oran limiti (429) → kullanıcıya nazik "yoğunuz" mesajı
-      const status = err?.status || err?.response?.status
-      if (status === 429) {
+      // ⚠️ Geçici Gemini hatası (kota 429 / aşırı yük 503 / 5xx) → nazik "yoğunuz".
+      // SDK err.status'u güvenilir set etmiyor; kodu hata MESAJINDAN da parse et
+      // (ör. "...: [503 Service Unavailable] ..."). 404 (ölü model) / 4xx (config)
+      // geçici DEĞİL → sert 500 "Failed to process query" olarak kalır.
+      const msg = String(err?.message ?? err ?? '')
+      const status =
+        Number(err?.status) ||
+        Number(err?.response?.status) ||
+        Number((msg.match(/\[(\d{3})\b/) || [])[1]) ||
+        0
+      const transient = status === 429 || (status >= 500 && status <= 599)
+      if (transient) {
+        console.error('Gemini transient error:', status, msg.slice(0, 160))
         return NextResponse.json(
           { error: 'We are a bit busy right now. Please try again in a moment.', reason: 'ai_busy' },
           { status: 503 }
         )
       }
-      console.error('Gemini error:', err?.message || err)
+      console.error('Gemini error:', msg)
       return NextResponse.json({ error: 'Failed to process query' }, { status: 500 })
     }
 
