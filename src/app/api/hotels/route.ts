@@ -32,8 +32,10 @@ const BodySchema = z
     radiusKm: z.number().min(1).max(50).default(5),
     city: z.string().trim().min(1).optional(),
     country: z.string().trim().min(1).optional(),
-    checkIn: z.string().regex(DATE_RE, 'checkIn must be YYYY-MM-DD'),
-    checkOut: z.string().regex(DATE_RE, 'checkOut must be YYYY-MM-DD'),
+    // Tarih OPSİYONEL — kullanıcı belirtmezse Gemini null döndürür; server-side
+    // makul bir default'a düşeriz (bkz. withDefaultDates). Verilirse format zorunlu.
+    checkIn: z.string().regex(DATE_RE, 'checkIn must be YYYY-MM-DD').nullish(),
+    checkOut: z.string().regex(DATE_RE, 'checkOut must be YYYY-MM-DD').nullish(),
     guests: z.number().int().min(1).max(10).default(2),
     budget: z
       .object({
@@ -45,7 +47,7 @@ const BodySchema = z
     // Kullanıcı önceliği ağırlıkları (search'ten) — Staylo fit skorunu bunlarla hesaplarız.
     weights: z.record(z.string(), z.number()).optional(),
   })
-  .refine((data) => new Date(data.checkOut) > new Date(data.checkIn), {
+  .refine((data) => !data.checkIn || !data.checkOut || new Date(data.checkOut) > new Date(data.checkIn), {
     message: 'checkOut must be after checkIn',
     path: ['checkOut'],
   })
@@ -93,6 +95,18 @@ const COUNTRY_NAME_TO_ISO2: Record<string, string> = {
 
 function countryToIso2(country: string): string | null {
   return COUNTRY_NAME_TO_ISO2[country.trim().toLowerCase()] ?? null
+}
+
+// Tarih verilmezse (kullanıcı belirtmedi → Gemini null) makul bir default'a düş:
+// bugünden +30 gün, 2 gecelik konaklama. Nuitee her zaman geçerli tarih ister.
+function withDefaultDates(checkIn?: string | null, checkOut?: string | null): { checkIn: string; checkOut: string } {
+  if (checkIn && checkOut) return { checkIn, checkOut }
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const start = new Date()
+  start.setUTCDate(start.getUTCDate() + 30)
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 2)
+  return { checkIn: fmt(start), checkOut: fmt(end) }
 }
 
 type NormalizedHotel = {
@@ -346,7 +360,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 4) Nuitee Connect üzerinden otel + fiyat sorgusu
-    const result = await fetchNuiteeHotels(parsed.data)
+    // Tarihleri default'la (yoksa +30g/2 gece) — Nuitee'ye her zaman geçerli tarih gitsin.
+    const { checkIn, checkOut } = withDefaultDates(parsed.data.checkIn, parsed.data.checkOut)
+    const result = await fetchNuiteeHotels({ ...parsed.data, checkIn, checkOut })
     if (!result.ok) {
       return NextResponse.json({ error: result.message }, { status: result.status })
     }
