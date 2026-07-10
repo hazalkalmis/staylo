@@ -791,7 +791,7 @@ export default function ResultPage() {
           if (cancelled) return;
           const data = await res.json().catch(() => ({}));
           if (cancelled) return;
-          if (!res.ok) { renderMessage("We couldn't fetch hotels right now. Please try again in a moment.", true); hideMap(); return; }
+          if (!res.ok) { renderMessage(data.error || "We couldn't fetch hotels right now. Please try again in a moment.", true); hideMap(); return; }
           const hotels = Array.isArray(data.hotels) ? data.hotels : [];
           if (!hotels.length) { renderMessage("No hotels found for this search. Try adjusting your dates or budget.", false); hideMap(); return; }
           if (resultsEl) resultsEl.innerHTML = hotels.map((h, i) => hotelCardHtml(h, i + 1)).join("");
