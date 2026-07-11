@@ -437,8 +437,9 @@ export default function ResultPage() {
         btn.classList.toggle("on"); // iyimser
         btn.disabled = true;
         try {
+          let r;
           if (wasOn) {
-            await fetch(`/api/favorites?hotelId=${encodeURIComponent(id)}`, { method: "DELETE" });
+            r = await fetch(`/api/favorites?hotelId=${encodeURIComponent(id)}`, { method: "DELETE" });
           } else {
             const h = hotelsById[String(id)] || {};
             const body = {
@@ -451,11 +452,16 @@ export default function ResultPage() {
               priceCurrency: h.price ? h.price.currency : null,
               fitScore: h.score && typeof h.score.fit === "number" ? h.score.fit : null,
             };
-            const r = await fetch("/api/favorites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-            if (r.status === 401) { window.location.href = "/login?next=/results"; return; }
+            r = await fetch("/api/favorites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
           }
+          if (r && r.status === 401) { window.location.href = "/login?next=/results"; return; }
+          // ⚠️ İyimser toggle'ı SADECE sunucu onaylarsa bırak; başarısızsa geri al.
+          // (Eskiden yalnızca 401 kontrol ediliyordu → 400/429/500 sessizce yutuluyor,
+          // heart dolu kalıp sahte "kaydedildi" görüntüsü veriyordu — /saved boş çıkıyordu.)
+          if (!r || !r.ok) { btn.classList.toggle("on"); btn.title = "Couldn't update — tap to retry"; }
+          else { btn.removeAttribute("title"); }
         } catch (err) {
-          btn.classList.toggle("on"); // hata → geri al
+          btn.classList.toggle("on"); // ağ hatası → geri al
         } finally {
           btn.disabled = false;
         }
@@ -659,7 +665,7 @@ export default function ResultPage() {
       const bookingHref = "/api/redirect?" + rp.toString();
       return `<article class="rcard" data-hotel-id="${esc(h.id)}">
         <div class="rthumb"><div class="rthumb-ph" style="${thumbStyle}"></div><div class="rank">${rank}</div>
-          <button class="rfav" type="button" aria-label="Save hotel"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.3C.6 8.9 2 5.5 5.2 5.5c1.9 0 3.2 1.1 3.8 2.3h.1c.6-1.2 1.9-2.3 3.8-2.3 3.2 0 4.6 3.4 3.2 6.2C19.5 16.4 12 21 12 21z"/></svg></button>
+          <button class="rfav" type="button" aria-label="Save hotel"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>
         </div>
         <div class="rmid">
           <div class="rname">${esc(h.name)}</div>
