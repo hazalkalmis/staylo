@@ -99,6 +99,14 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rhead h1 .stamp{display:inline-block;background:var(--ocean);color:#fff;padding:0 13px 5px;border-radius:6px;line-height:1.04;}
   .rsub{font-size:16px;color:var(--body);margin:16px 0 0;max-width:680px;}
   .rsub b{color:var(--ink);font-weight:600;}
+  /* sinyal-yok genel banner'ı (başlık altında) */
+  .rnosignal{display:none;font-size:13.5px;color:var(--body);margin:12px 0 0;max-width:680px;line-height:1.5;
+             background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:11px 14px;}
+  .rnosignal.show{display:flex;gap:9px;align-items:flex-start;}
+  .rnosignal .i{flex:0 0 auto;width:16px;height:16px;border-radius:50%;background:var(--ocean);color:#fff;
+                font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-top:1px;}
+  /* fit hesaplanamıyor (ağırlıklı kriterlerde sinyal yok) */
+  .rnofit{font-size:12px;color:var(--muted);text-align:center;line-height:1.45;max-width:150px;padding:6px 0;}
   .rfilters{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:20px 0 0;}
   .adjust-btn{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#fff;
               background:var(--ink);border:1px solid var(--ink);border-radius:999px;padding:7px 16px 7px 13px;
@@ -147,6 +155,10 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rib .vl{font-size:15px;font-weight:600;font-family:ui-monospace,monospace;color:var(--ink);}
   .rib .bar{height:3px;background:#e1ecf3;border-radius:2px;position:relative;overflow:hidden;}
   .rib .bar i{position:absolute;inset:0 auto 0 0;height:100%;border-radius:2px;}
+  /* sinyal yok — sahte skor yerine soluk "no data" */
+  .rib.nosig{justify-content:center;gap:4px;}
+  .rib.nosig .nm{color:var(--faint);}
+  .rib.nosig .vl{font-size:10.5px;font-weight:500;font-family:'Geist',sans-serif;color:var(--faint);letter-spacing:0.01em;}
 
   .rrail{padding:24px 22px;display:flex;flex-direction:column;align-items:center;gap:13px;
          background:linear-gradient(180deg,#f3f9fc,#e9f4fb);}
@@ -269,6 +281,7 @@ const BODY = `
     <div class="reyebrow"><span class="dot"></span>Step 3 of 4 · Your ranked answer</div>
     <h1 id="rHeadline">Your ranked stays.</h1>
     <p class="rsub" id="rSub">Scoring hotels on your priorities…</p>
+    <div class="rnosignal" id="rNoSignal"></div>
     <div class="rfilters" id="rFilters"></div>
   </div>
 
@@ -498,17 +511,21 @@ export default function ResultPage() {
       if (v >= 5) return "linear-gradient(150deg,#48cae4,#0096c7)";
       return "linear-gradient(150deg,#8ca6b5,#5f7688)";
     }
-    function ribbonHtml(criteria) {
+    function ribbonHtml(criteria, noSignal) {
       if (!criteria || typeof criteria !== "object") return "";
+      const noSet = new Set(Array.isArray(noSignal) ? noSignal : []);
       const cells = CRIT.map(([k, label]) => {
         const v = typeof criteria[k] === "number" ? criteria[k] : null;
-        const pct = v == null ? 0 : Math.max(0, Math.min(100, v * 10));
+        // Sinyal yok → "no data" (sahte 5.0 YOK, % YOK, bar YOK).
+        if (noSet.has(k) || v == null) {
+          return `<div class="rib nosig"><div class="nm"><span>${label}</span></div><div class="vl">no data</div></div>`;
+        }
+        const pct = Math.max(0, Math.min(100, v * 10));
         const w = typeof WEIGHTS[k] === "number" ? WEIGHTS[k] : 0;
-        const col = v == null ? "#cfdbe4" : barColor(v);
         return `<div class="rib">
           <div class="nm"><span>${label}</span><span class="wt">${w}%</span></div>
-          <div class="vl">${v == null ? "–" : fmtScore(v)}</div>
-          <div class="bar"><i style="width:${pct}%;background:${col};"></i></div>
+          <div class="vl">${fmtScore(v)}</div>
+          <div class="bar"><i style="width:${pct}%;background:${barColor(v)};"></i></div>
         </div>`;
       }).join("");
       return `<div class="ribbon">${cells}</div>`;
@@ -623,6 +640,34 @@ export default function ResultPage() {
       sEl.innerHTML = rev
         ? `Based on <b>${rev} reviews</b> from Google &amp; Tripadvisor across ${hotelTxt}, scored on your priorities.`
         : `Scored ${hotelTxt} on your priorities.`;
+
+      // Genel sinyal-yok banner'ı: kullanıcının ağırlık verdiği (weight>0) bir kriter
+      // analiz edilen otellerin ≥%30'unda "no data" ise net mesaj göster (sahte 5.0 yok).
+      const nsEl = document.getElementById("rNoSignal");
+      if (nsEl) {
+        nsEl.className = "rnosignal"; nsEl.innerHTML = "";
+        const scored = hotelList.filter((h) => h.score);
+        if (scored.length >= 3) {
+          const LABEL = { safety: "Safety", quiet: "Quiet", family: "Family", value: "Value", walkability: "Walkability", cleanliness: "Cleanliness" };
+          const isMiss = (h, k) => {
+            const c = (h.score && h.score.criteria) || {};
+            const ns = h.score && Array.isArray(h.score.noSignal) ? h.score.noSignal : [];
+            return ns.indexOf(k) !== -1 || typeof c[k] !== "number";
+          };
+          const flagged = CRIT.map(([k]) => k).filter((k) =>
+            typeof WEIGHTS[k] === "number" && WEIGHTS[k] > 0 &&
+            scored.filter((h) => isMiss(h, k)).length / scored.length >= 0.30
+          );
+          if (flagged.length) {
+            const X = scored.filter((h) => flagged.some((k) => isMiss(h, k))).length;
+            const labels = flagged.map((k) => LABEL[k] || k);
+            const names = labels.length === 1 ? labels[0] : labels.slice(0, -1).join(", ") + " and " + labels[labels.length - 1];
+            const verb = labels.length === 1 ? "wasn't" : "weren't";
+            nsEl.innerHTML = `<span class="i">i</span><span>${names} ${verb} covered in the reviews for ${X} of ${scored.length} hotels. For those, we ranked using your other priorities.</span>`;
+            nsEl.className = "rnosignal show";
+          }
+        }
+      }
     }
 
     function hotelCardHtml(h, rank) {
@@ -643,14 +688,17 @@ export default function ResultPage() {
       const summaryHtml = score && score.summary
         ? `<div class="rsumq">${esc(score.summary)}</div>`
         : "";
-      const ribbon = score ? ribbonHtml(score.criteria) : "";
-      // Belirgin Staylo fit rozeti — skor yoksa (analiz gelmediyse) rozet gizlenir, kart kırılmaz.
+      const ribbon = score ? ribbonHtml(score.criteria, score.noSignal) : "";
+      // Belirgin Staylo fit rozeti. Edge-case: analiz VAR ama ağırlık verdiğin
+      // kriterlerin hiçbirinde sinyal yok (fit null) → sahte skor yerine net mesaj.
       const fit = score && typeof score.fit === "number" ? score.fit : null;
       const badgeHtml = fit != null
         ? `<div class="rbadge" style="background:${fitBg(fit)}">${fmtScore(fit)}</div>
            <div class="rblabel">Staylo fit
-             <span class="info">i<span class="tip">Weighted 0–10 score built from guest reviews across Google &amp; Tripadvisor, matched to your priorities.</span></span>
+             <span class="info">i<span class="tip">Weighted 0–10 score from guest reviews across Google &amp; Tripadvisor. Criteria with no review signal are excluded and their weight redistributed.</span></span>
            </div>`
+        : score
+        ? `<div class="rnofit">Not enough review data to score this hotel on your priorities.</div>`
         : "";
       const sources = sourcesHtml(h.sources);
       // "View on Booking" → /api/redirect (server logs click + 302 to Booking deep-link).
