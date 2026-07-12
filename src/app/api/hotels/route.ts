@@ -128,7 +128,8 @@ const CRITERIA_KEYS = ['safety', 'quiet', 'family', 'value', 'walkability', 'cle
 
 type ScorePayload = {
   fit: number | null // ağırlıklı Staylo fit (0-10)
-  criteria: Partial<Record<(typeof CRITERIA_KEYS)[number], number>> | null // her kriter 0-10
+  criteria: Partial<Record<(typeof CRITERIA_KEYS)[number], number>> | null // her kriter 0-10 (sinyali olanlar)
+  noSignal: (typeof CRITERIA_KEYS)[number][] // yorumlarda sinyali olmayan ağırlıklı kriterler → UI "no data"
   summary: string | null
 } | null
 
@@ -161,12 +162,18 @@ function buildScoreFields(analysis: HotelAnalysisData, weights: Record<string, n
     if (Object.keys(c).length) criteria = c
   }
 
+  // Sinyali olmayan ağırlıklı kriterler (UI'da "no data" + genel banner için).
+  const noSignal = (analysis.geminiScores?.noSignal ?? []).filter(
+    (k): k is (typeof CRITERIA_KEYS)[number] => (CRITERIA_KEYS as readonly string[]).includes(k)
+  )
+
   const score: ScorePayload =
     weighted.total == null && !criteria
       ? null
       : {
           fit: weighted.total != null ? Math.round(weighted.total * 10) / 10 : null,
           criteria,
+          noSignal,
           summary: analysis.geminiScores?.summary ?? null,
         }
 

@@ -60,6 +60,7 @@ export type ReviewDistribution = { total: number; positive: number; negative: nu
 // Gemini çıktısı + iç metadata (dağılım, havuz boyutu — kullanıcıya inmez).
 export type GeminiScores = {
   scores: Partial<Record<ScoreCriterion, number>>
+  noSignal: ScoreCriterion[] // yorumlarda anlamlı sinyali olmayan → skorlanmadı (5.0 default YOK)
   summary: string | null
   distribution: ReviewDistribution
   poolSize: number
@@ -283,7 +284,7 @@ async function computeGeminiScores(pool: PoolReview[], dist: ReviewDistribution)
   if (!corpus.trim()) return null
 
   const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' })
-  const prompt = `You are a hotel review analyst. Based ONLY on the guest reviews below, score this hotel on each criterion from 0 to 10 (10 = excellent). Weigh the full set; do not let a single outlier dominate. If a criterion has no signal, score near the middle. Return ONLY valid JSON, no markdown.
+  const prompt = `You are a hotel review analyst. Based ONLY on the guest reviews below, score this hotel on each criterion from 0 to 10 (10 = excellent). Weigh the full set; do not let a single outlier dominate. If the reviews contain NO meaningful signal about a criterion, do NOT score it — omit its key entirely AND add its name to "insufficientSignal". Never guess and never use a neutral/middle default for an unmentioned criterion. Return ONLY valid JSON, no markdown.
 
 Review distribution (for calibration): ${dist.total} reviews analyzed — ${dist.positive} positive, ${dist.negative} negative, ${dist.neutral} neutral.
 
@@ -299,8 +300,8 @@ Criteria:
 Reviews:
 ${corpus}
 
-Return exactly:
-{"safety":0-10,"quiet":0-10,"family":0-10,"value":0-10,"walkability":0-10,"cleanliness":0-10,"staff":0-10,"summary":"one short sentence (max 15 words) capturing overall guest sentiment"}`
+Return exactly (omit any criterion with no signal from the scores, and list those names in insufficientSignal):
+{"safety":0-10,"quiet":0-10,"family":0-10,"value":0-10,"walkability":0-10,"cleanliness":0-10,"staff":0-10,"insufficientSignal":["names of criteria the reviews don't cover"],"summary":"one short sentence (max 15 words) capturing overall guest sentiment"}`
 
   let text: string
   try {
@@ -319,15 +320,25 @@ Return exactly:
     return null
   }
 
+  // Gemini'nin "sinyal yok" dediği kriterler — skorlanmaz (5.0 default YOK).
+  const flagged = new Set<string>(
+    Array.isArray(parsed?.insufficientSignal) ? parsed.insufficientSignal.filter((x: any) => typeof x === 'string') : []
+  )
+
   const scores: Partial<Record<ScoreCriterion, number>> = {}
   for (const k of SCORE_CRITERIA) {
+    if (flagged.has(k)) continue // sinyal yok → atla (yanlışlıkla sayı dönse bile)
     const v = Number(parsed?.[k])
     if (Number.isFinite(v)) scores[k] = Math.max(0, Math.min(10, v))
   }
   if (Object.keys(scores).length === 0) return null
 
+  // noSignal = skorlanmayan kriterler (flagged + Gemini'nin sessizce atladıkları).
+  const noSignal = SCORE_CRITERIA.filter((k) => !(k in scores))
+
   return {
     scores,
+    noSignal,
     summary: typeof parsed?.summary === 'string' ? parsed.summary : null,
     distribution: dist,
     poolSize: pool.length,
