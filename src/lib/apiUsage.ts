@@ -8,6 +8,14 @@ import { sendAlertEmail } from '@/lib/email'
 // Eşik dolunca çağıran kaynak o gün atlanır (fail-safe); ertesi gün sıfırlanır.
 // ----------------------------------------------------------------------------
 
+// Global Gemini günlük çağrı tavanı — çıkarım (/api/search) + skorlama
+// (hotelAnalysis) ORTAK sayılır. Prepay bakiyesini anormal patlamaya karşı koruyan
+// bir SİGORTA (gerçek launch trafiğini etkilemeyecek kadar cömert). Env ile
+// override edilebilir; Vercel'de değişiklik redeploy ister. Varsayılan 2000
+// ≈ $4-8/gün. Tavan dolunca: çıkarım 503 "busy", skorlama sessizce cache/havuza
+// düşer (graceful) ve recordUsage eşiği geçince BUDGET_ALERT_EMAIL'e mail gider.
+export const GEMINI_DAILY_CAP = Number(process.env.GEMINI_DAILY_CAP) || 2000
+
 function today(): string {
   return new Date().toISOString().slice(0, 10) // UTC gün (YYYY-MM-DD)
 }

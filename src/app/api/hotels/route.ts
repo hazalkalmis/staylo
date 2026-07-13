@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
+import { verifyTurnstile } from '@/lib/turnstile'
 import { getTouristPlaces, type TouristData } from '@/lib/touristPlaces'
 import { haversineMeters, formatDistance } from '@/lib/geo'
 import { getHotelPhotoUrl } from '@/lib/hotelPhotos'
@@ -46,6 +47,9 @@ const BodySchema = z
       .optional(),
     // Kullanıcı önceliği ağırlıkları (search'ten) — Staylo fit skorunu bunlarla hesaplarız.
     weights: z.record(z.string(), z.number()).optional(),
+    // Cloudflare Turnstile token'ı (/results widget'ından) — pahalı Nuitee+Gemini
+    // skorlama endpoint'inde bot/rotasyonlu-IP koruması.
+    turnstileToken: z.string().optional(),
   })
   .refine((data) => !data.checkIn || !data.checkOut || new Date(data.checkOut) > new Date(data.checkIn), {
     message: 'checkOut must be after checkIn',
@@ -388,8 +392,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid coordinates' }, { status: 400 })
     }
 
-    // 3) ⚠️ Rate limit
     const ip = getClientIp(request)
+
+    // 2b) ⚠️ Turnstile — pahalı Nuitee+Gemini skorlama endpoint'inde bot/rotasyonlu-IP
+    // koruması. /results widget'ı taze token üretip gönderir. Secret yoksa fail-CLOSED
+    // (turnstile.ts) → prod'da secret set olmalı; olmazsa 403 döner.
+    const turnstileOk = await verifyTurnstile(parsed.data.turnstileToken || '', ip)
+    if (!turnstileOk) {
+      return NextResponse.json(
+        { error: 'Verification failed. Please refresh the page and try again.', reason: 'turnstile_failed' },
+        { status: 403 }
+      )
+    }
+
+    // 3) ⚠️ Rate limit
     const rl = await checkRateLimit(ip, 'hotels', HOTELS_RATE_LIMIT)
     if (!rl.allowed) {
       const msg =

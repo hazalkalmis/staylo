@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 import { verifyTurnstile } from '@/lib/turnstile'
+import { getDailyUsage, recordUsage, GEMINI_DAILY_CAP } from '@/lib/apiUsage'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -129,6 +130,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: msg, reason: rl.reason }, { status: 429 })
     }
 
+    // 2b) Global Gemini bütçe tavanı — prepay bakiyesi sigortası. Dolu ise çıkarım
+    // yapamayız (Gemini tek çıkarıcı) → nazik "yoğunuz" (503). recordUsage eşiği
+    // geçince BUDGET_ALERT_EMAIL'e mail gider, sessizce kilitlenmez.
+    if ((await getDailyUsage('gemini')) >= GEMINI_DAILY_CAP) {
+      console.error(`[BUDGET] gemini günlük tavan dolu (>=${GEMINI_DAILY_CAP}) — arama çıkarımı reddedildi`)
+      return NextResponse.json(
+        { error: 'We are a bit busy right now. Please try again in a moment.', reason: 'ai_busy' },
+        { status: 503 }
+      )
+    }
+
     // 3) Gemini ile NL → JSON
     // ⚠️ Bugünün tarihini prompt'a MUTLAKA ver: yoksa model yılsız tarihte
     // ("July 21st") eğitim dağılımından geçmiş bir yıl (2025) uyduruyordu →
@@ -178,6 +190,8 @@ Rules:
     try {
       const result = await model.generateContent(prompt)
       text = result.response.text()
+      // gerçek 1 Gemini çağrısını global tavana say (eşik geçilince mail gider)
+      await recordUsage('gemini', 1, GEMINI_DAILY_CAP)
       // ⏱️ Timing: Turnstile siteverify vs Gemini süresini AYRI logla. Hafta 8'de
       // Gemini tier değişince /api/search gecikme dağılımını kıyaslayabilmek için kalıcı.
       console.log(`[search timing] turnstile=${tsMs}ms gemini=${Date.now() - gemStart}ms`)

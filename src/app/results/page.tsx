@@ -828,36 +828,90 @@ export default function ResultPage() {
       renderMessage("Searching for hotels…", false);
       renderHeader(null);
       hideMap();
-      const payload = {
-        checkIn: F.checkIn,
-        checkOut: F.checkOut,
-        guests: F.guests || 2,
-        city: F.city,
-        country: F.country,
-      };
-      if (F.weights && typeof F.weights === "object") payload.weights = F.weights;
-      if (F.budget && (F.budget.min != null || F.budget.max != null)) {
-        payload.budget = { min: F.budget.min, max: F.budget.max, currency: F.budget.currency || "EUR" };
-      }
       const controller = new AbortController();
-      fetch("/api/hotels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: controller.signal })
-        .then(async (res) => {
-          if (cancelled) return;
-          const data = await res.json().catch(() => ({}));
-          if (cancelled) return;
-          if (!res.ok) { renderMessage(data.error || "We couldn't fetch hotels right now. Please try again in a moment.", true); hideMap(); return; }
-          const hotels = Array.isArray(data.hotels) ? data.hotels : [];
-          if (!hotels.length) { renderMessage("No hotels found for this search. Try adjusting your dates or budget.", false); hideMap(); return; }
-          if (resultsEl) resultsEl.innerHTML = hotels.map((h, i) => hotelCardHtml(h, i + 1)).join("");
-          renderHeader(hotels);
-          setupFavorites(hotels);
-          initMap(hotels);
-        })
-        .catch((err) => { if (!cancelled && err.name !== "AbortError") renderMessage("Network error. Please check your connection and try again.", true); if (!cancelled) hideMap(); });
+
+      // /api/hotels çağrısı — Turnstile token'ı hazır olunca çalışır.
+      function doFetch(tsToken) {
+        removeTurnstile();
+        const payload = {
+          checkIn: F.checkIn,
+          checkOut: F.checkOut,
+          guests: F.guests || 2,
+          city: F.city,
+          country: F.country,
+          turnstileToken: tsToken || "",
+        };
+        if (F.weights && typeof F.weights === "object") payload.weights = F.weights;
+        if (F.budget && (F.budget.min != null || F.budget.max != null)) {
+          payload.budget = { min: F.budget.min, max: F.budget.max, currency: F.budget.currency || "EUR" };
+        }
+        fetch("/api/hotels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: controller.signal })
+          .then(async (res) => {
+            if (cancelled) return;
+            const data = await res.json().catch(() => ({}));
+            if (cancelled) return;
+            if (!res.ok) { renderMessage(data.error || "We couldn't fetch hotels right now. Please try again in a moment.", true); hideMap(); return; }
+            const hotels = Array.isArray(data.hotels) ? data.hotels : [];
+            if (!hotels.length) { renderMessage("No hotels found for this search. Try adjusting your dates or budget.", false); hideMap(); return; }
+            if (resultsEl) resultsEl.innerHTML = hotels.map((h, i) => hotelCardHtml(h, i + 1)).join("");
+            renderHeader(hotels);
+            setupFavorites(hotels);
+            initMap(hotels);
+          })
+          .catch((err) => { if (!cancelled && err.name !== "AbortError") renderMessage("Network error. Please check your connection and try again.", true); if (!cancelled) hideMap(); });
+      }
+
+      // Turnstile: pahalı Nuitee+Gemini endpoint'i için taze token al, sonra fetch et.
+      // Token gelmeden /api/hotels çağrılmaz (server fail-closed 403 döner).
+      const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+      let tsTimeout = null;
+      function removeTurnstile() {
+        if (tsTimeout) { clearTimeout(tsTimeout); tsTimeout = null; }
+        const w = document.getElementById("rTurnstileWrap");
+        if (w) { try { w.remove(); } catch (e) {} }
+      }
+      if (!TURNSTILE_SITE_KEY) {
+        doFetch(""); // anahtar yoksa client fail-open (server secret varsa yine 403 verir)
+      } else {
+        let fired = false;
+        window.onResultsTurnstileVerified = (token) => { if (fired || cancelled) return; fired = true; doFetch(token); };
+        window.onResultsTurnstileError = () => { if (fired || cancelled) return; fired = true; removeTurnstile(); renderMessage("Couldn't verify your browser. Please refresh the page and try again.", true); };
+
+        const listEl = document.getElementById("resultsList");
+        if (listEl && listEl.parentNode && !document.getElementById("rTurnstileWrap")) {
+          const wrap = document.createElement("div");
+          wrap.id = "rTurnstileWrap";
+          wrap.style.cssText = "display:flex;justify-content:center;margin:14px 0;";
+          const widget = document.createElement("div");
+          widget.className = "cf-turnstile";
+          widget.setAttribute("data-sitekey", TURNSTILE_SITE_KEY);
+          widget.setAttribute("data-callback", "onResultsTurnstileVerified");
+          widget.setAttribute("data-error-callback", "onResultsTurnstileError");
+          widget.setAttribute("data-theme", "light");
+          wrap.appendChild(widget);
+          listEl.parentNode.insertBefore(wrap, listEl);
+        }
+        if (!document.getElementById("turnstile-script")) {
+          const s = document.createElement("script");
+          s.id = "turnstile-script";
+          s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+          s.async = true;
+          s.defer = true;
+          document.head.appendChild(s);
+        }
+        // Güvenlik ağı: script bloklanır/çok gecikirse kullanıcı sonsuz "Searching…"de kalmasın
+        tsTimeout = setTimeout(() => {
+          if (fired || cancelled) return;
+          fired = true;
+          removeTurnstile();
+          renderMessage("Couldn't verify your browser. Please refresh the page and try again.", true);
+        }, 15000);
+      }
 
       return () => {
         cancelled = true;
         controller.abort();
+        removeTurnstile();
         if (mapInstance) { try { mapInstance.remove(); } catch (e) {} mapInstance = null; }
       };
     }
