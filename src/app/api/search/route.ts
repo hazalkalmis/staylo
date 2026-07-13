@@ -51,6 +51,38 @@ function normalizeWeights(weights: Record<string, number>): Record<string, numbe
   return out
 }
 
+// ----------------------------------------------------------------------------
+// D1 — geçmiş checkIn'i yakın geleceğe çek + kullanıcıya bildir.
+// Gemini kısmi tarihi ("21 Haziran") current-year döndürür; ay geçmişse bir yıl
+// ileri SIÇRATMAK yerine (→ 2027, Nuitee'nin boş ufkuna itiyordu) makul yakın bir
+// tarihe (bugün+30, tarih verilmeyince kullanılan default'la aynı) çekip
+// filters.dateAdjusted bayrağını bırakıyoruz — /filters "geçmişti, ayarladık" der.
+// ----------------------------------------------------------------------------
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+function adjustPastCheckIn(filters: any): void {
+  if (!filters || typeof filters.checkIn !== 'string' || !DATE_RE.test(filters.checkIn)) return
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const ci = new Date(`${filters.checkIn}T00:00:00Z`)
+  if (ci >= today) return // gelecekteyse dokunma
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const from = filters.checkIn
+  const start = new Date(today)
+  start.setUTCDate(start.getUTCDate() + 30)
+
+  // checkOut verildiyse gece sayısını koru; verilmediyse null bırak (D2 backstop 2 gece ekler)
+  if (typeof filters.checkOut === 'string' && DATE_RE.test(filters.checkOut)) {
+    const co = new Date(`${filters.checkOut}T00:00:00Z`)
+    const nights = Math.max(1, Math.round((co.getTime() - ci.getTime()) / 86_400_000))
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + nights)
+    filters.checkOut = fmt(end)
+  }
+  filters.checkIn = fmt(start)
+  filters.dateAdjusted = { from, to: fmt(start) }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 1) ⚠️ Input validasyonu
@@ -136,7 +168,9 @@ Rules:
 - All field VALUES must be in English (city/country in English), EXCEPT userLanguage which is the detected language code
 - weights must sum to 100
 - If not mentioned, set safety:20, quiet:20, family:10, value:25, walkability:15, cleanliness:10
-- Extract dates if mentioned, otherwise null. Interpret all dates relative to today's date above. For a partial or relative date (e.g. "July 21st", "next Friday", "mid-June") with no explicit year, pick the NEXT occurrence that is today or later — NEVER a date in the past.
+- Extract dates if mentioned, otherwise null. Interpret all dates relative to today's date above.
+- For a partial date with no explicit year (e.g. "July 21st", "June 21", "mid-June"), assume the CURRENT year even if that day has already passed this year — return it as-is (a past date is fine here). Do NOT advance it to next year; the server will adjust past dates.
+- For an explicitly relative date ("next Friday", "in 3 weeks", "tomorrow"), compute it forward from today.
 - guests default: 2`
 
     let text: string
@@ -185,6 +219,9 @@ Rules:
 
     // 5) weights normalize (toplam = 100 garanti)
     filters.weights = normalizeWeights(filters.weights || {})
+
+    // 5b) D1: geçmiş checkIn'i yakın geleceğe çek + dateAdjusted bayrağı bırak
+    adjustPastCheckIn(filters)
 
     // userLanguage güvenli varsayılan
     if (typeof filters.userLanguage !== 'string') filters.userLanguage = 'en'

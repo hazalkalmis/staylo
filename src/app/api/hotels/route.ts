@@ -97,35 +97,49 @@ function countryToIso2(country: string): string | null {
   return COUNTRY_NAME_TO_ISO2[country.trim().toLowerCase()] ?? null
 }
 
-// Tarih verilmezse (kullanıcı belirtmedi → Gemini null) makul bir default'a düş:
-// bugünden +30 gün, 2 gecelik konaklama. Nuitee her zaman geçerli tarih ister.
-// ⚠️ Emniyet: tarih GELSE bile geçmişteyse (Gemini yılı şaşırdı ya da bayat
-// sessionStorage) Nuitee'ye doomed bir past-date query atmayalım → gece sayısını
-// koruyup yıl ekleyerek geleceğe kaydır (2025-07-21 → 2026-07-21). Sessiz "0 otel"
-// yerine kullanıcı yakın bir tarih için sonuç görür.
+const DATE_RE_D = /^\d{4}-\d{2}-\d{2}$/
+// Nuitee her zaman geçerli tarih ister. Kurallar:
+//  - checkIn yoksa: tam default (bugün+30, 2 gece).
+//  - D2: checkOut yoksa checkIn'i ATMA — koru + 2 gece ekle (eskiden checkIn
+//    tamamen atılıp default'a düşülüyordu → kullanıcının verdiği gün kayboluyordu).
+//  - Emniyet: checkIn geçmişteyse yakın geleceğe (bugün+30) çek, gece sayısını koru.
+//    (Asıl düzeltme /api/search'te dateAdjusted ile yapılıyor; bu bayat/edit edilmiş
+//    tarihler için son savunma — sessiz.)
 function withDefaultDates(checkIn?: string | null, checkOut?: string | null): { checkIn: string; checkOut: string } {
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
   const today = new Date()
   today.setUTCHours(0, 0, 0, 0)
 
-  if (checkIn && checkOut) {
-    const ci = new Date(`${checkIn}T00:00:00Z`)
-    if (ci >= today) return { checkIn, checkOut }
-    // geçmiş → gece sayısını koru, yıl ekleyerek bugüne/sonraya taşı
-    const co = new Date(`${checkOut}T00:00:00Z`)
-    const nights = Math.max(1, Math.round((co.getTime() - ci.getTime()) / 86_400_000))
-    while (ci < today) ci.setUTCFullYear(ci.getUTCFullYear() + 1)
-    const newCo = new Date(ci)
-    newCo.setUTCDate(newCo.getUTCDate() + nights)
-    console.warn(`checkIn was in the past (${checkIn}); shifted forward to ${fmt(ci)}`)
-    return { checkIn: fmt(ci), checkOut: fmt(newCo) }
+  const mkDefault = () => {
+    const s = new Date(today)
+    s.setUTCDate(s.getUTCDate() + 30)
+    const e = new Date(s)
+    e.setUTCDate(e.getUTCDate() + 2)
+    return { checkIn: fmt(s), checkOut: fmt(e) }
   }
 
-  const start = new Date()
-  start.setUTCDate(start.getUTCDate() + 30)
-  const end = new Date(start)
-  end.setUTCDate(end.getUTCDate() + 2)
-  return { checkIn: fmt(start), checkOut: fmt(end) }
+  if (!checkIn || !DATE_RE_D.test(checkIn)) return mkDefault()
+
+  let ci = new Date(`${checkIn}T00:00:00Z`)
+
+  // gece sayısını belirle (checkOut geçerliyse ondan, değilse 2 — D2)
+  let nights = 2
+  if (checkOut && DATE_RE_D.test(checkOut)) {
+    const co = new Date(`${checkOut}T00:00:00Z`)
+    const n = Math.round((co.getTime() - ci.getTime()) / 86_400_000)
+    if (n >= 1) nights = n
+  }
+
+  // geçmiş checkIn → yakın geleceğe çek
+  if (ci < today) {
+    ci = new Date(today)
+    ci.setUTCDate(ci.getUTCDate() + 30)
+    console.warn(`checkIn was in the past (${checkIn}); pulled forward to ${fmt(ci)}`)
+  }
+
+  const co2 = new Date(ci)
+  co2.setUTCDate(co2.getUTCDate() + nights)
+  return { checkIn: fmt(ci), checkOut: fmt(co2) }
 }
 
 type NormalizedHotel = {
@@ -388,6 +402,19 @@ export async function POST(request: NextRequest) {
     // 4) Nuitee Connect üzerinden otel + fiyat sorgusu
     // Tarihleri default'la (yoksa +30g/2 gece) — Nuitee'ye her zaman geçerli tarih gitsin.
     const { checkIn, checkOut } = withDefaultDates(parsed.data.checkIn, parsed.data.checkOut)
+
+    // Uzak-gelecek guard: Nuitee müsaitliği ~20+ ay ötesinde tükeniyor (test:
+    // 23 ay → 0 otel, 200). Sessiz "No hotels found" yerine net mesaj ver.
+    const maxAhead = new Date()
+    maxAhead.setUTCHours(0, 0, 0, 0)
+    maxAhead.setUTCMonth(maxAhead.getUTCMonth() + 18)
+    if (new Date(`${checkIn}T00:00:00Z`) > maxAhead) {
+      return NextResponse.json(
+        { error: "We can't check availability that far ahead yet. Please pick a date within about the next 18 months." },
+        { status: 400 }
+      )
+    }
+
     const result = await fetchNuiteeHotels({ ...parsed.data, checkIn, checkOut })
     if (!result.ok) {
       return NextResponse.json({ error: result.message }, { status: result.status })
