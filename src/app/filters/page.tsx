@@ -83,8 +83,14 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .fixbtn{display:none;align-items:center;gap:6px;font:600 12px 'Geist',sans-serif;color:#fff;
           background:var(--ocean);border:1px solid var(--ocean);border-radius:999px;padding:6px 13px;cursor:pointer;
           transition:background 120ms;}
-  .fixbtn:hover{background:#0369a1;}
-  .fixbtn.show{display:inline-flex;}
+  .fixbtn:hover{background:#0369a1;animation:none;}
+  /* toplam 100 değilken buton dikkat çeksin: yumuşak nabız + glow */
+  .fixbtn.show{display:inline-flex;animation:fixpulse 1.6s ease-in-out infinite;}
+  @keyframes fixpulse{
+    0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(0,119,182,0.45);}
+    50%{transform:scale(1.05);box-shadow:0 0 0 6px rgba(0,119,182,0);}
+  }
+  @media (prefers-reduced-motion: reduce){ .fixbtn.show{animation:none;} }
 
   /* fields grid */
   .fields{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);
@@ -143,7 +149,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .wrow .wv{font-size:14px;font-weight:600;color:var(--ink);font-family:ui-monospace,monospace;text-align:right;}
   .slider{position:relative;height:22px;display:flex;align-items:center;}
   .slider .trk{position:absolute;left:0;right:0;height:6px;border-radius:3px;background:#e1ecf3;}
-  .slider .fill{position:absolute;left:0;height:6px;border-radius:3px;background:var(--ocean);}
+  .slider .fill{position:absolute;left:0;height:6px;border-radius:3px;background:var(--ocean);transition:width 120ms ease;}
   .slider input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;margin:0;position:relative;z-index:2;cursor:ew-resize;}
   .slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--ocean);box-shadow:0 2px 6px rgba(3,4,94,0.22);cursor:ew-resize;}
   .slider input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--ocean);box-shadow:0 2px 6px rgba(3,4,94,0.22);cursor:ew-resize;}
@@ -260,7 +266,7 @@ const BODY = `
         <div class="wfoot">
           <span class="tip">Drag any slider — each moves on its own.&nbsp;</span>
           <div class="actions">
-            <a href="/" class="btn btn--ghost">← Edit search</a>
+            <a href="/search" class="btn btn--ghost">← Edit search</a>
             <a href="/results" class="btn">Find hotels →</a>
           </div>
         </div>
@@ -661,6 +667,11 @@ export default function ConfirmPage() {
       const findBtn = document.querySelector(".actions .btn:not(.btn--ghost)");
       if (!findBtn || !SD) return;
       findBtn.addEventListener("click", function(){
+        // Ağırlıkları submit'te sessizce 100'e normalize et + gösterilen değerleri
+        // güncelle (kullanıcının gördüğü = kaydedilen). adjustTo100 zaten WEIGHTS'i
+        // yeniden ölçekleyip fill/value/range DOM'unu günceller; slider fill'i CSS
+        // transition ile kısa bir geçişle kayar. Sonra normalize edilmiş w'leri oku.
+        adjustTo100();
         // Hem YYYY-MM-DD hem DD.MM.YYYY (alan placeholder'ı) kabul et; YYYY-MM-DD'ye normalize et.
         const parseDate = (v) => {
           const s = String(v || "").trim();

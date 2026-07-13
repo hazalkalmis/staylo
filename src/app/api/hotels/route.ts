@@ -99,9 +99,28 @@ function countryToIso2(country: string): string | null {
 
 // Tarih verilmezse (kullanıcı belirtmedi → Gemini null) makul bir default'a düş:
 // bugünden +30 gün, 2 gecelik konaklama. Nuitee her zaman geçerli tarih ister.
+// ⚠️ Emniyet: tarih GELSE bile geçmişteyse (Gemini yılı şaşırdı ya da bayat
+// sessionStorage) Nuitee'ye doomed bir past-date query atmayalım → gece sayısını
+// koruyup yıl ekleyerek geleceğe kaydır (2025-07-21 → 2026-07-21). Sessiz "0 otel"
+// yerine kullanıcı yakın bir tarih için sonuç görür.
 function withDefaultDates(checkIn?: string | null, checkOut?: string | null): { checkIn: string; checkOut: string } {
-  if (checkIn && checkOut) return { checkIn, checkOut }
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+
+  if (checkIn && checkOut) {
+    const ci = new Date(`${checkIn}T00:00:00Z`)
+    if (ci >= today) return { checkIn, checkOut }
+    // geçmiş → gece sayısını koru, yıl ekleyerek bugüne/sonraya taşı
+    const co = new Date(`${checkOut}T00:00:00Z`)
+    const nights = Math.max(1, Math.round((co.getTime() - ci.getTime()) / 86_400_000))
+    while (ci < today) ci.setUTCFullYear(ci.getUTCFullYear() + 1)
+    const newCo = new Date(ci)
+    newCo.setUTCDate(newCo.getUTCDate() + nights)
+    console.warn(`checkIn was in the past (${checkIn}); shifted forward to ${fmt(ci)}`)
+    return { checkIn: fmt(ci), checkOut: fmt(newCo) }
+  }
+
   const start = new Date()
   start.setUTCDate(start.getUTCDate() + 30)
   const end = new Date(start)
