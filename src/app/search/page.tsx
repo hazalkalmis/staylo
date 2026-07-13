@@ -185,6 +185,17 @@ export default function SearchPage() {
     const btn = document.getElementById("searchBtn");
     const hintEl = document.querySelector(".searchbox .hint");
     const defaultHint = hintEl ? hintEl.innerHTML : "";
+
+    /* ---------- geri navigasyonda yazılan sorguyu geri yükle ----------
+       Turnstile script'i bfcache'i bozduğu için /filters'tan geri gelince sayfa
+       tam reload olur ve textarea boşalırdı. Son aramayı sessionStorage'dan
+       (staylo_search.query) okuyup geri doldur — kullanıcı metnini kaybetmesin. */
+    if (ta && !ta.value) {
+      try {
+        const sd = JSON.parse(sessionStorage.getItem("staylo_search") || "null");
+        if (sd && typeof sd.query === "string" && sd.query.trim()) ta.value = sd.query;
+      } catch (e) {}
+    }
     let busy = false;
     function setHint(msg, isError){ if(!hintEl) return; hintEl.innerHTML = msg; hintEl.style.color = isError ? "#d94030" : ""; }
     function resetBtn(){ if(!btn) return; btn.textContent = "Search →"; btn.style.opacity = ""; btn.style.pointerEvents = ""; }
@@ -195,7 +206,7 @@ export default function SearchPage() {
       if(TURNSTILE_SITE_KEY && !tsToken){ setHint("Please wait a moment for verification to finish, then press Search again.", true); return; }
       if(busy) return; busy = true;
       if(btn){ btn.textContent = "Searching..."; btn.style.opacity = "0.7"; btn.style.pointerEvents = "none"; }
-      setHint("Reading your request...", false);
+      setHint("Understanding your trip...", false);
       try{
         const res = await fetch("/api/search", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ query, hp: hpEl ? hpEl.value : "", turnstileToken: tsToken }) });
         const data = await res.json().catch(()=>({}));

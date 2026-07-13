@@ -76,7 +76,10 @@ export async function POST(request: NextRequest) {
     }
 
     // ---------- Turnstile: honeypot'un ÜSTÜNE ikinci bot koruması katmanı ----------
+    // ⏱️ Timing: siteverify süresini ayrı ölç (Hafta 8'de Gemini tier kıyası için).
+    const tsStart = Date.now()
     const turnstileOk = await verifyTurnstile(turnstileToken || '', ip)
+    const tsMs = Date.now() - tsStart
     if (!turnstileOk) {
       return NextResponse.json(
         { error: 'Verification failed. Please refresh the page and try again.', reason: 'turnstile_failed' },
@@ -95,8 +98,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 3) Gemini ile NL → JSON
+    // ⚠️ Bugünün tarihini prompt'a MUTLAKA ver: yoksa model yılsız tarihte
+    // ("July 21st") eğitim dağılımından geçmiş bir yıl (2025) uyduruyordu →
+    // Nuitee geçmiş tarihe müsaitlik döndürmüyor → "No hotels found". Tarih
+    // runtime'da hesaplanır (deploy'da sabitlenmez).
+    const today = new Date().toISOString().slice(0, 10) // UTC YYYY-MM-DD
     const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' })
     const prompt = `Extract hotel search filters from this query. Return ONLY valid JSON, no markdown, no explanation.
+
+Today's date is ${today}.
 
 Query: "${query}"
 
@@ -126,14 +136,19 @@ Rules:
 - All field VALUES must be in English (city/country in English), EXCEPT userLanguage which is the detected language code
 - weights must sum to 100
 - If not mentioned, set safety:20, quiet:20, family:10, value:25, walkability:15, cleanliness:10
-- Extract dates if mentioned, otherwise null
+- Extract dates if mentioned, otherwise null. Interpret all dates relative to today's date above. For a partial or relative date (e.g. "July 21st", "next Friday", "mid-June") with no explicit year, pick the NEXT occurrence that is today or later — NEVER a date in the past.
 - guests default: 2`
 
     let text: string
+    const gemStart = Date.now()
     try {
       const result = await model.generateContent(prompt)
       text = result.response.text()
+      // ⏱️ Timing: Turnstile siteverify vs Gemini süresini AYRI logla. Hafta 8'de
+      // Gemini tier değişince /api/search gecikme dağılımını kıyaslayabilmek için kalıcı.
+      console.log(`[search timing] turnstile=${tsMs}ms gemini=${Date.now() - gemStart}ms`)
     } catch (err: any) {
+      console.log(`[search timing] turnstile=${tsMs}ms gemini=${Date.now() - gemStart}ms (error)`)
       // ⚠️ Geçici Gemini hatası (kota 429 / aşırı yük 503 / 5xx) → nazik "yoğunuz".
       // SDK err.status'u güvenilir set etmiyor; kodu hata MESAJINDAN da parse et
       // (ör. "...: [503 Service Unavailable] ..."). 404 (ölü model) / 4xx (config)
