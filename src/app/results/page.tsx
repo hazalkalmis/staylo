@@ -183,6 +183,8 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rprice{font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-0.02em;}
   .rprice span{font-size:12px;color:var(--muted);font-weight:400;}
   .rrail .btn{width:100%;}
+  /* Nuitee arzı ≠ Booking arzı: müsaitlik/fiyat farkı için beklenti notu */
+  .rbooknote{margin-top:7px;font-size:11px;line-height:1.4;color:var(--muted);text-align:center;}
 
   @media(max-width:880px){.rcard{grid-template-columns:1fr;}.rthumb{height:180px;}.rmid{border:none;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}.ribbon{flex-wrap:wrap;}.rib{flex:1 1 33%;}
     #hotelMap{height:260px;}}
@@ -707,6 +709,7 @@ export default function ResultPage() {
       rp.set("hotel", String(h.id ?? ""));
       if (h.name) rp.set("name", String(h.name));
       if (F && F.city) rp.set("city", String(F.city));
+      if (F && F.country) rp.set("country", String(F.country));
       if (F && F.checkIn) rp.set("checkIn", String(F.checkIn));
       if (F && F.checkOut) rp.set("checkOut", String(F.checkOut));
       if (F && F.guests) rp.set("guests", String(F.guests));
@@ -728,6 +731,7 @@ export default function ResultPage() {
           ${sources}
           <div class="rprice">${priceHtml}</div>
           <a class="btn" href="${esc(bookingHref)}" rel="nofollow sponsored">View on Booking</a>
+          <div class="rbooknote">Availability &amp; final price confirmed on Booking.com</div>
         </div>
       </article>`;
     }
