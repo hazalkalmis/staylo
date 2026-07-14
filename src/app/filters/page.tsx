@@ -103,6 +103,14 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .field label{display:block;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:7px;}
   .field input{width:100%;border:none;outline:none;background:transparent;font:500 16px 'Geist',sans-serif;color:var(--ink);letter-spacing:-0.01em;}
   .field input::placeholder{color:var(--faint);font-weight:400;}
+  /* native date picker — .field görünümüyle uyumlu; takvim ikonu ocean tonuna yakın */
+  .field input[type=date]{cursor:pointer;min-height:20px;}
+  .field input[type=date]::-webkit-datetime-edit{color:var(--ink);}
+  .field input[type=date]:not(.filled)::-webkit-datetime-edit{color:var(--faint);}
+  .field input[type=date]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:0.55;
+    transition:opacity 120ms;padding:2px;margin-left:4px;}
+  .field input[type=date]:hover::-webkit-calendar-picker-indicator{opacity:0.9;}
+  .field input[type=date]::-webkit-inner-spin-button{display:none;}
 
   /* tag fields (Vibe / Must-have) — full width, searchable chips */
   .xfields{display:flex;flex-direction:column;gap:1px;background:var(--border);
@@ -238,8 +246,8 @@ const BODY = `
         <div class="fields">
           <div class="field"><label>City</label><input value="Lisbon, Portugal"></div>
           <div class="field"><label>Guests</label><input value="2 adults"></div>
-          <div class="field"><label>Check in</label><input value="12.09.2026" placeholder="dd.mm.yyyy"></div>
-          <div class="field"><label>Check out</label><input value="16.09.2026" placeholder="dd.mm.yyyy"></div>
+          <div class="field"><label>Check in</label><input type="date" class="datepick"></div>
+          <div class="field"><label>Check out</label><input type="date" class="datepick"></div>
           <div class="field"><label>Min budget (€/night)</label><input value="90"></div>
           <div class="field"><label>Max budget (€/night)</label><input value="180"></div>
         </div>
@@ -572,6 +580,40 @@ export default function ConfirmPage() {
     // placeholder-default'ları kalmasın → persist edilince sahte filtre olmasın).
     const ciInput = fieldByLabel("check in"); if (ciInput) ciInput.value = F.checkIn || "";
     const coInput = fieldByLabel("check out"); if (coInput) coInput.value = F.checkOut || "";
+    // ---------- native takvim seçici (type=date) ----------
+    // Değer HER ZAMAN YYYY-MM-DD döner → parseDate'e dokunmadan uyar. min=bugün;
+    // check-out'un min'i check-in+1 gün (checkout>checkin garantisi); alana tıklayınca
+    // takvim açılır (showPicker). .filled → dolu/boş metin rengi.
+    (function(){
+      const todayISO = new Date().toISOString().slice(0, 10);
+      const nextDayISO = (iso) => {
+        const d = new Date(iso + "T00:00:00Z");
+        if (isNaN(d.getTime())) return todayISO;
+        d.setUTCDate(d.getUTCDate() + 1);
+        return d.toISOString().slice(0, 10);
+      };
+      const markFilled = (el) => { if (el) el.classList.toggle("filled", !!el.value); };
+      const openPicker = (el) => { try { if (el.showPicker) el.showPicker(); } catch (e) {} };
+      if (ciInput) {
+        ciInput.min = todayISO;
+        markFilled(ciInput);
+        ciInput.addEventListener("click", () => openPicker(ciInput));
+      }
+      if (coInput) {
+        coInput.min = (ciInput && ciInput.value) ? nextDayISO(ciInput.value) : nextDayISO(todayISO);
+        markFilled(coInput);
+        coInput.addEventListener("click", () => openPicker(coInput));
+      }
+      if (ciInput && coInput) {
+        ciInput.addEventListener("change", () => {
+          markFilled(ciInput);
+          coInput.min = nextDayISO(ciInput.value || todayISO);
+          if (coInput.value && coInput.value < coInput.min) coInput.value = ""; // geçersiz kalanı temizle
+          markFilled(coInput);
+        });
+        coInput.addEventListener("change", () => markFilled(coInput));
+      }
+    })();
     // D1: girilen tarih geçmişte kaldıysa yakına çekildi — kullanıcıya bildir
     (function(){
       const note = document.getElementById("dateNote");

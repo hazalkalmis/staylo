@@ -29,12 +29,16 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 function buildBookingUrl(opts: {
   name: string | null
   city: string | null
+  country: string | null
   checkIn: string | null
   checkOut: string | null
   guests: number | null
 }): string {
   const params = new URLSearchParams()
-  const ss = [opts.name, opts.city].filter(Boolean).join(' ').trim()
+  // Booking ID'si Nuitee'de YOK → metin araması. Ülkeyi de ekleyerek çapraz-ülke
+  // şehir belirsizliğini (ör. Rome/IT vs Rome/US) azaltıyoruz. Adres/zip eklemiyoruz:
+  // Booking'in fuzzy araması aşırı kısıtlanınca oteli sonuçtan düşürebilir.
+  const ss = [opts.name, opts.city, opts.country].filter(Boolean).join(' ').trim()
   if (ss) params.set('ss', ss)
   if (opts.checkIn && DATE_RE.test(opts.checkIn)) params.set('checkin', opts.checkIn)
   if (opts.checkOut && DATE_RE.test(opts.checkOut)) params.set('checkout', opts.checkOut)
@@ -66,12 +70,13 @@ export async function GET(request: NextRequest) {
   const hotelId = (sp.get('hotel') || '').trim()
   const name = (sp.get('name') || '').trim() || null
   const city = (sp.get('city') || '').trim() || null
+  const country = (sp.get('country') || '').trim() || null
   const checkIn = (sp.get('checkIn') || '').trim() || null
   const checkOut = (sp.get('checkOut') || '').trim() || null
   const guestsRaw = Number(sp.get('guests'))
   const guests = Number.isFinite(guestsRaw) && guestsRaw > 0 ? Math.floor(guestsRaw) : null
 
-  const bookingUrl = buildBookingUrl({ name, city, checkIn, checkOut, guests })
+  const bookingUrl = buildBookingUrl({ name, city, country, checkIn, checkOut, guests })
   const destinationUrl = applyAffiliate(bookingUrl)
 
   // Tıklamayı logla — best-effort: hata olsa da kullanıcıyı yönlendirmeyi engelleme.
