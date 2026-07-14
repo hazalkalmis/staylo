@@ -185,6 +185,11 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rrail .btn{width:100%;}
   /* Nuitee arzı ≠ Booking arzı: müsaitlik/fiyat farkı için beklenti notu */
   .rbooknote{margin-top:7px;font-size:11px;line-height:1.4;color:var(--muted);text-align:center;}
+  /* "Searching for hotels…" loading spinner (sol tarafta dönen halka) */
+  .rspin{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);
+         border-top-color:var(--ocean);animation:rspin 0.7s linear infinite;flex-shrink:0;}
+  @keyframes rspin{to{transform:rotate(360deg);}}
+  @media (prefers-reduced-motion: reduce){ .rspin{animation-duration:1.6s;} }
 
   @media(max-width:880px){.rcard{grid-template-columns:1fr;}.rthumb{height:180px;}.rmid{border:none;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}.ribbon{flex-wrap:wrap;}.rib{flex:1 1 33%;}
     #hotelMap{height:260px;}}
@@ -482,10 +487,11 @@ export default function ResultPage() {
         }
       });
     }
-    function renderMessage(text, isError) {
+    function renderMessage(text, isError, isLoading) {
       if (!resultsEl) return;
+      const spinner = isLoading ? '<span class="rspin" aria-hidden="true"></span>' : "";
       resultsEl.innerHTML = `<section class="card"><div class="card-pad" style="text-align:center;padding:54px 34px;">
-        <p style="margin:0;font-size:15px;color:${isError ? "#d94030" : "var(--muted)"}">${esc(text)}</p>
+        <p style="margin:0;font-size:15px;color:${isError ? "#d94030" : "var(--muted)"};display:inline-flex;align-items:center;gap:10px;">${spinner}${esc(text)}</p>
       </div></section>`;
     }
     /* ---------- score UI helpers ---------- */
@@ -829,7 +835,7 @@ export default function ResultPage() {
     if (F && F.weights && typeof F.weights === "object") WEIGHTS = F.weights;
     if (!F) { window.location.replace("/search"); }
     else {
-      renderMessage("Searching for hotels…", false);
+      renderMessage("Searching for hotels…", false, true);
       renderHeader(null);
       hideMap();
       const controller = new AbortController();
