@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 import { verifyTurnstile } from '@/lib/turnstile'
+import { getDailyUsage, recordUsage, GEMINI_DAILY_CAP } from '@/lib/apiUsage'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -49,6 +50,38 @@ function normalizeWeights(weights: Record<string, number>): Record<string, numbe
   const out: Record<string, number> = {}
   for (const { k, v } of scaled) out[k] = v
   return out
+}
+
+// ----------------------------------------------------------------------------
+// D1 — geçmiş checkIn'i yakın geleceğe çek + kullanıcıya bildir.
+// Gemini kısmi tarihi ("21 Haziran") current-year döndürür; ay geçmişse bir yıl
+// ileri SIÇRATMAK yerine (→ 2027, Nuitee'nin boş ufkuna itiyordu) makul yakın bir
+// tarihe (bugün+30, tarih verilmeyince kullanılan default'la aynı) çekip
+// filters.dateAdjusted bayrağını bırakıyoruz — /filters "geçmişti, ayarladık" der.
+// ----------------------------------------------------------------------------
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+function adjustPastCheckIn(filters: any): void {
+  if (!filters || typeof filters.checkIn !== 'string' || !DATE_RE.test(filters.checkIn)) return
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const ci = new Date(`${filters.checkIn}T00:00:00Z`)
+  if (ci >= today) return // gelecekteyse dokunma
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const from = filters.checkIn
+  const start = new Date(today)
+  start.setUTCDate(start.getUTCDate() + 30)
+
+  // checkOut verildiyse gece sayısını koru; verilmediyse null bırak (D2 backstop 2 gece ekler)
+  if (typeof filters.checkOut === 'string' && DATE_RE.test(filters.checkOut)) {
+    const co = new Date(`${filters.checkOut}T00:00:00Z`)
+    const nights = Math.max(1, Math.round((co.getTime() - ci.getTime()) / 86_400_000))
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + nights)
+    filters.checkOut = fmt(end)
+  }
+  filters.checkIn = fmt(start)
+  filters.dateAdjusted = { from, to: fmt(start) }
 }
 
 export async function POST(request: NextRequest) {
@@ -97,6 +130,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: msg, reason: rl.reason }, { status: 429 })
     }
 
+    // 2b) Global Gemini bütçe tavanı — prepay bakiyesi sigortası. Dolu ise çıkarım
+    // yapamayız (Gemini tek çıkarıcı) → nazik "yoğunuz" (503). recordUsage eşiği
+    // geçince BUDGET_ALERT_EMAIL'e mail gider, sessizce kilitlenmez.
+    if ((await getDailyUsage('gemini')) >= GEMINI_DAILY_CAP) {
+      console.error(`[BUDGET] gemini günlük tavan dolu (>=${GEMINI_DAILY_CAP}) — arama çıkarımı reddedildi`)
+      return NextResponse.json(
+        { error: 'We are a bit busy right now. Please try again in a moment.', reason: 'ai_busy' },
+        { status: 503 }
+      )
+    }
+
     // 3) Gemini ile NL → JSON
     // ⚠️ Bugünün tarihini prompt'a MUTLAKA ver: yoksa model yılsız tarihte
     // ("July 21st") eğitim dağılımından geçmiş bir yıl (2025) uyduruyordu →
@@ -136,7 +180,9 @@ Rules:
 - All field VALUES must be in English (city/country in English), EXCEPT userLanguage which is the detected language code
 - weights must sum to 100
 - If not mentioned, set safety:20, quiet:20, family:10, value:25, walkability:15, cleanliness:10
-- Extract dates if mentioned, otherwise null. Interpret all dates relative to today's date above. For a partial or relative date (e.g. "July 21st", "next Friday", "mid-June") with no explicit year, pick the NEXT occurrence that is today or later — NEVER a date in the past.
+- Extract dates if mentioned, otherwise null. Interpret all dates relative to today's date above.
+- For a partial date with no explicit year (e.g. "July 21st", "June 21", "mid-June"), assume the CURRENT year even if that day has already passed this year — return it as-is (a past date is fine here). Do NOT advance it to next year; the server will adjust past dates.
+- For an explicitly relative date ("next Friday", "in 3 weeks", "tomorrow"), compute it forward from today.
 - guests default: 2`
 
     let text: string
@@ -144,6 +190,8 @@ Rules:
     try {
       const result = await model.generateContent(prompt)
       text = result.response.text()
+      // gerçek 1 Gemini çağrısını global tavana say (eşik geçilince mail gider)
+      await recordUsage('gemini', 1, GEMINI_DAILY_CAP)
       // ⏱️ Timing: Turnstile siteverify vs Gemini süresini AYRI logla. Hafta 8'de
       // Gemini tier değişince /api/search gecikme dağılımını kıyaslayabilmek için kalıcı.
       console.log(`[search timing] turnstile=${tsMs}ms gemini=${Date.now() - gemStart}ms`)
@@ -185,6 +233,9 @@ Rules:
 
     // 5) weights normalize (toplam = 100 garanti)
     filters.weights = normalizeWeights(filters.weights || {})
+
+    // 5b) D1: geçmiş checkIn'i yakın geleceğe çek + dateAdjusted bayrağı bırak
+    adjustPastCheckIn(filters)
 
     // userLanguage güvenli varsayılan
     if (typeof filters.userLanguage !== 'string') filters.userLanguage = 'en'

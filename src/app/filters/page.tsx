@@ -78,6 +78,10 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .pill{font-size:12px;font-weight:600;color:var(--ocean);background:var(--surface-2);border:1px solid var(--border);
         border-radius:999px;padding:5px 12px;transition:color 120ms,background 120ms,border-color 120ms;}
   .pill.warn{color:#d94030;background:#fdecea;border-color:#f5c6c0;}
+  /* geçmiş tarih yakına çekilince kullanıcıya bilgi notu */
+  .datenote{margin-top:12px;font-size:13px;line-height:1.5;color:#8a5a00;background:#fff7e6;
+            border:1px solid #ffe0a3;border-radius:10px;padding:10px 13px;display:flex;gap:8px;align-items:flex-start;}
+  .datenote b{color:#6b4700;font-weight:600;}
 
   /* fix-to-100 button */
   .fixbtn{display:none;align-items:center;gap:6px;font:600 12px 'Geist',sans-serif;color:#fff;
@@ -239,6 +243,7 @@ const BODY = `
           <div class="field"><label>Min budget (€/night)</label><input value="90"></div>
           <div class="field"><label>Max budget (€/night)</label><input value="180"></div>
         </div>
+        <div class="datenote" id="dateNote" style="display:none"></div>
         <div class="xfields">
           <div class="xfield" data-tagfield="vibe">
             <label>Vibe <span style="color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">— optional</span></label>
@@ -333,11 +338,13 @@ export default function ConfirmPage() {
             add:"Add", addVibe:"Add a vibe", addMust:"Add a must-have", total:"Total", adjust:"Adjust to 100%",
             editSearch:"Edit search", findHotels:"Find hotels", searchVibes:"Search vibes…", searchMust:"Search must-haves…",
             noMore:"No more options", addCustom:"Add", inThe:"Your search in",
+            dateFixed:"The date you gave had already passed, so we set it to <b>{d}</b> — adjust it if you like.",
             w:{safety:["Safety & area","Verified neighbourhood + recent reviews"],quiet:["Quietness","Noise mentions across reviews"],walk:["Walkability","Distance to centre + transit"],value:["Value","Price vs. quality vs. location"],clean:["Cleanliness","Housekeeping mentions"],family:["Family fit","Cribs, space, kid amenities"]} },
       tr: { yourSearch:"Aramanız", rank:"Otelleri nasıl sıralayacağız", vibe:"Tarz", must:"Olmazsa olmaz", optional:"opsiyonel",
             add:"Ekle", addVibe:"Tarz ekle", addMust:"Olmazsa olmaz ekle", total:"Toplam", adjust:"%100'e ayarla",
             editSearch:"Aramayı düzenle", findHotels:"Otelleri bul", searchVibes:"Tarz ara…", searchMust:"Özellik ara…",
             noMore:"Başka seçenek yok", addCustom:"Ekle", inThe:"Arama:",
+            dateFixed:"Girdiğin tarih geçmişti, <b>{d}</b> olarak ayarladık — istersen değiştir.",
             w:{safety:["Güvenlik & bölge","Doğrulanmış mahalle + güncel yorumlar"],quiet:["Sessizlik","Yorumlarda gürültü bahsi"],walk:["Yürünebilirlik","Merkeze + ulaşıma uzaklık"],value:["Fiyat/performans","Fiyat vs. kalite vs. konum"],clean:["Temizlik","Kat hizmeti bahsi"],family:["Aileye uygunluk","Bebek yatağı, alan, çocuk olanakları"]} },
       de: { yourSearch:"Deine Suche", rank:"So bewerten wir Hotels", vibe:"Ambiente", must:"Unverzichtbar", optional:"optional",
             add:"Hinzufügen", addVibe:"Ambiente hinzufügen", addMust:"Unverzichtbares hinzufügen", total:"Gesamt", adjust:"Auf 100% setzen",
@@ -565,6 +572,15 @@ export default function ConfirmPage() {
     // placeholder-default'ları kalmasın → persist edilince sahte filtre olmasın).
     const ciInput = fieldByLabel("check in"); if (ciInput) ciInput.value = F.checkIn || "";
     const coInput = fieldByLabel("check out"); if (coInput) coInput.value = F.checkOut || "";
+    // D1: girilen tarih geçmişte kaldıysa yakına çekildi — kullanıcıya bildir
+    (function(){
+      const note = document.getElementById("dateNote");
+      if (note && F.dateAdjusted && F.dateAdjusted.to) {
+        const tpl = T.dateFixed || "The date you gave had already passed, so we set it to <b>{d}</b> — adjust it if you like.";
+        note.innerHTML = '<span aria-hidden="true">📅</span><span>' + tpl.replace("{d}", F.dateAdjusted.to) + '</span>';
+        note.style.display = "flex";
+      }
+    })();
     const minInput = fieldByLabel("min budget"); if (minInput) minInput.value = (F.budget && F.budget.min != null) ? F.budget.min : "";
     const maxInput = fieldByLabel("max budget"); if (maxInput) maxInput.value = (F.budget && F.budget.max != null) ? F.budget.max : "";
 

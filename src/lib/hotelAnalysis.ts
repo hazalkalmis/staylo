@@ -2,7 +2,7 @@ import 'server-only'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { findGooglePlace } from '@/lib/googlePlace'
-import { getDailyUsage, recordUsage } from '@/lib/apiUsage'
+import { getDailyUsage, recordUsage, GEMINI_DAILY_CAP } from '@/lib/apiUsage'
 
 // ============================================================================
 // ⚠️⚠️⚠️ STAYLO ÇEKİRDEĞİ — TAKLİT EDİLEMEZ KISIM ⚠️⚠️⚠️
@@ -404,11 +404,17 @@ export async function getHotelAnalysis(
 
   // Bayat/eksik → yeni yorumları çek. Önce günlük maliyet tavanını kontrol et;
   // dolu olan kaynak atlanır (fail-safe — diğer kaynak + havuz yine skorlar).
-  const [googleUsage, terraUsage] = await Promise.all([getDailyUsage('google'), getDailyUsage('tripadvisor')])
+  const [googleUsage, terraUsage, geminiUsage] = await Promise.all([
+    getDailyUsage('google'),
+    getDailyUsage('tripadvisor'),
+    getDailyUsage('gemini'),
+  ])
   const googleAllowed = googleUsage < GOOGLE_DAILY_CAP
   const terraAllowed = terraUsage < TERRA_DAILY_CAP
+  const geminiAllowed = geminiUsage < GEMINI_DAILY_CAP
   if (!googleAllowed) console.error(`[BUDGET] google günlük tavan dolu (${googleUsage}/${GOOGLE_DAILY_CAP}) — atlanıyor`)
   if (!terraAllowed) console.error(`[BUDGET] tripadvisor günlük tavan dolu (${terraUsage}/${TERRA_DAILY_CAP}) — atlanıyor`)
+  if (!geminiAllowed) console.error(`[BUDGET] gemini günlük tavan dolu (${geminiUsage}/${GEMINI_DAILY_CAP}) — skorlama atlanıyor, cache/havuz kullanılıyor`)
 
   const [gRes, tRes] = await Promise.allSettled([
     googleAllowed ? fetchGoogle(name, address) : Promise.resolve(null),
@@ -434,7 +440,16 @@ export async function getHotelAnalysis(
   if (pool.length === 0) return pack(google, tripadvisor, prevScores) // hiç yorum yok, yazma
 
   const dist = computeDistribution(pool)
-  const geminiScores = (await computeGeminiScores(pool, dist)) ?? prevScores
+  // Gemini skorlama global tavana takılıysa çağrı YAPMA — eski skorları/cache'i koru
+  // (graceful). Taze skor alındıysa gerçek 1 çağrıyı say (eşik geçilince mail gider).
+  let geminiScores = prevScores
+  if (geminiAllowed) {
+    const fresh = await computeGeminiScores(pool, dist)
+    if (fresh) {
+      geminiScores = fresh
+      await recordUsage('gemini', 1, GEMINI_DAILY_CAP)
+    }
+  }
 
   supabaseAdmin
     .from('hotel_analysis')
