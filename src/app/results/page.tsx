@@ -182,6 +182,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .src-line b{font-family:ui-monospace,monospace;font-weight:600;color:var(--ink);font-size:12px;}
   .rprice{font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-0.02em;}
   .rprice span{font-size:12px;color:var(--muted);font-weight:400;}
+  .rpricesub{margin-top:2px;font-size:11.5px;color:var(--muted);font-weight:400;letter-spacing:0;}
   .rrail .btn{width:100%;}
   /* Nuitee arzı ≠ Booking arzı: müsaitlik/fiyat farkı için beklenti notu */
   .rbooknote{margin-top:7px;font-size:11px;line-height:1.4;color:var(--muted);text-align:center;}
@@ -678,13 +679,20 @@ export default function ResultPage() {
       }
     }
 
-    function hotelCardHtml(h, rank) {
+    function hotelCardHtml(h, rank, nights) {
       const photo = safePhotoUrl(h.photo);
       const thumbStyle = photo
         ? `background-image:url('${photo}');background-size:cover;background-position:center;`
         : `background:linear-gradient(135deg,#bee1e6,#90e0ef);`;
+      // Fiyat GECE BAŞI gösterilir; >1 gece ise toplam da eklenir ("€146/night ·
+      // €876 total for 6 nights"). perNight server'dan gelir; yoksa amount'a düş.
+      const nnights = nights > 0 ? nights : 1;
+      const perNight = (h.price && h.price.perNight != null) ? h.price.perNight : (h.price ? h.price.amount : null);
       const priceHtml = h.price
-        ? `€${Math.round(h.price.amount)}<span> /night</span>`
+        ? `€${Math.round(perNight)}<span> /night</span>` +
+          (nnights > 1 && h.price.amount != null
+            ? `<div class="rpricesub">€${Math.round(h.price.amount)} total for ${nnights} nights</div>`
+            : "")
         : `<span style="font-size:13px;color:var(--muted);">Price unavailable</span>`;
       const distHtml = h.distanceToCenter
         ? `<div class="rdist">${esc(h.distanceToCenter)} to city center</div>`
@@ -863,7 +871,8 @@ export default function ResultPage() {
             if (!res.ok) { renderMessage(data.error || "We couldn't fetch hotels right now. Please try again in a moment.", true); hideMap(); return; }
             const hotels = Array.isArray(data.hotels) ? data.hotels : [];
             if (!hotels.length) { renderMessage("No hotels found for this search. Try adjusting your dates or budget.", false); hideMap(); return; }
-            if (resultsEl) resultsEl.innerHTML = hotels.map((h, i) => hotelCardHtml(h, i + 1)).join("");
+            const nights = Number(data.nights) > 0 ? Number(data.nights) : 1;
+            if (resultsEl) resultsEl.innerHTML = hotels.map((h, i) => hotelCardHtml(h, i + 1, nights)).join("");
             renderHeader(hotels);
             setupFavorites(hotels);
             initMap(hotels);
