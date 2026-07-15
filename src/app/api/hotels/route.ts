@@ -153,7 +153,9 @@ type NormalizedHotel = {
   latitude: number | null
   longitude: number | null
   photo: string | null
-  price: { amount: number; currency: string } | null
+  // amount = tüm konaklama toplamı (Nuitee retailRate.total); perNight = amount/nights.
+  // Bütçe filtresi ve kart gösterimi perNight kullanır (UI "€/night").
+  price: { amount: number; perNight: number; currency: string } | null
   distanceToCenter: string | null
   nearbyAttractions: { name: string; distance: string; latitude: number; longitude: number }[]
 }
@@ -243,9 +245,10 @@ type HotelsParams = {
 // `data[]` (hotelId + roomTypes/rates, fiyat burada) ve `hotels[]` (id + name/
 // main_photo/address/latitude/longitude/stars, otel içeriği burada). İkisi
 // `hotelId` ↔ `id` üzerinden eşleşiyor, tek objede gelmiyor.
-function normalizeHotel(raw: any, hotelMeta: any): NormalizedHotel {
+function normalizeHotel(raw: any, hotelMeta: any, nights: number): NormalizedHotel {
   const firstRate = raw?.roomTypes?.[0]?.rates?.[0]
   const totalAmount = firstRate?.retailRate?.total?.[0]
+  const n = nights > 0 ? nights : 1
 
   return {
     id: String(raw?.hotelId ?? ''),
@@ -254,10 +257,19 @@ function normalizeHotel(raw: any, hotelMeta: any): NormalizedHotel {
     latitude: hotelMeta?.latitude ?? null,
     longitude: hotelMeta?.longitude ?? null,
     photo: hotelMeta?.main_photo ?? hotelMeta?.thumbnail ?? null,
-    price: totalAmount ? { amount: totalAmount.amount, currency: totalAmount.currency } : null,
+    // amount = konaklama toplamı; perNight = toplam / gece sayısı (bütçe & gösterim per-night)
+    price: totalAmount ? { amount: totalAmount.amount, perNight: Math.round(totalAmount.amount / n), currency: totalAmount.currency } : null,
     distanceToCenter: null,
     nearbyAttractions: [],
   }
+}
+
+// checkIn/checkOut (YYYY-MM-DD) arası gece sayısı (min 1).
+function nightsBetween(checkIn: string, checkOut: string): number {
+  const ci = new Date(`${checkIn}T00:00:00Z`).getTime()
+  const co = new Date(`${checkOut}T00:00:00Z`).getTime()
+  const n = Math.round((co - ci) / 86_400_000)
+  return n >= 1 ? n : 1
 }
 
 // Haversine ile şehir merkezine ve en yakın 2-3 turistik yere mesafe ekler.
@@ -367,9 +379,10 @@ async function fetchNuiteeHotels(params: HotelsParams): Promise<NuiteeFetchResul
   const hotelMetaById = new Map<string, any>(
     Array.isArray(json?.hotels) ? json.hotels.map((h: any) => [String(h.id), h]) : []
   )
+  const nights = nightsBetween(params.checkIn, params.checkOut)
   const hotels = rawHotels
     .slice(0, 20)
-    .map((h) => normalizeHotel(h, hotelMetaById.get(String(h?.hotelId))))
+    .map((h) => normalizeHotel(h, hotelMetaById.get(String(h?.hotelId)), nights))
 
   return { ok: true, hotels }
 }
@@ -418,6 +431,7 @@ export async function POST(request: NextRequest) {
     // 4) Nuitee Connect üzerinden otel + fiyat sorgusu
     // Tarihleri default'la (yoksa +30g/2 gece) — Nuitee'ye her zaman geçerli tarih gitsin.
     const { checkIn, checkOut } = withDefaultDates(parsed.data.checkIn, parsed.data.checkOut)
+    const nights = nightsBetween(checkIn, checkOut) // kart "€X/night · €Y total for N nights" için
 
     // Uzak-gelecek guard: Nuitee müsaitliği ~20+ ay ötesinde tükeniyor (test:
     // 23 ay → 0 otel, 200). Sessiz "No hotels found" yerine net mesaj ver.
@@ -441,10 +455,12 @@ export async function POST(request: NextRequest) {
     let hotels = result.hotels
     if (budget && (budget.min != null || budget.max != null)) {
       const currency = budget.currency
+      // ⚠️ Bütçe UI'da "€/night" → GECE BAŞI fiyatla kıyasla (konaklama TOPLAMIYLA
+      // değil). Aksi halde çok-geceli aramada toplam bütçeyi aşıp tüm otelleri elerdi.
       hotels = hotels.filter((h) => {
         if (!h.price || h.price.currency !== currency) return true
-        if (budget.min != null && h.price.amount < budget.min) return false
-        if (budget.max != null && h.price.amount > budget.max) return false
+        if (budget.min != null && h.price.perNight < budget.min) return false
+        if (budget.max != null && h.price.perNight > budget.max) return false
         return true
       })
     }
@@ -505,7 +521,7 @@ export async function POST(request: NextRequest) {
       return bv - av
     })
 
-    return NextResponse.json({ hotels: scored })
+    return NextResponse.json({ hotels: scored, nights })
   } catch (error) {
     console.error('Hotels API error:', error)
     return NextResponse.json(
