@@ -218,7 +218,9 @@ export default function SearchPage() {
     if(btn) btn.addEventListener("click", runSearch);
     if(ta) ta.addEventListener("keydown", (e)=>{ if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); runSearch(); } });
     if(ta) ta.addEventListener("input", ()=>{ if(!busy) setHint(defaultHint, false); });
-    document.querySelectorAll(".chip").forEach(chip=>{ chip.addEventListener("click", ()=>{ if(ta){ ta.value = chip.textContent.trim(); ta.focus(); } runSearch(); }); });
+    // Chip'e tıklayınca metni textarea'ya YAZ ama arama BAŞLATMA — kullanıcı
+    // isterse düzenleyip kendi Search'e bassın.
+    document.querySelectorAll(".chip").forEach(chip=>{ chip.addEventListener("click", ()=>{ if(ta){ ta.value = chip.textContent.trim(); ta.focus(); if(!busy) setHint(defaultHint, false); } }); });
     /* eslint-enable */
   }, []);
 

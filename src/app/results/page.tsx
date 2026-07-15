@@ -718,7 +718,8 @@ export default function ResultPage() {
         : "";
       const sources = sourcesHtml(h.sources);
       // "View on Booking" → /api/redirect (server logs click + 302 to Booking deep-link).
-      // target=_blank YOK (roadmap kuralı) — aynı sekmede gider.
+      // Yeni sekmede açılır (target=_blank + noopener noreferrer) — kullanıcı Staylo'dan
+      // ayrılmasın, sonuç sekmesi açık kalsın.
       const rp = new URLSearchParams();
       rp.set("hotel", String(h.id ?? ""));
       if (h.name) rp.set("name", String(h.name));
@@ -744,7 +745,7 @@ export default function ResultPage() {
           ${badgeHtml}
           ${sources}
           <div class="rprice">${priceHtml}</div>
-          <a class="btn" href="${esc(bookingHref)}" rel="nofollow sponsored">View on Booking</a>
+          <a class="btn" href="${esc(bookingHref)}" target="_blank" rel="nofollow sponsored noopener noreferrer">View on Booking</a>
           <div class="rbooknote">Availability &amp; final price confirmed on Booking.com</div>
         </div>
       </article>`;
