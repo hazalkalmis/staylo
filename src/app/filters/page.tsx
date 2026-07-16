@@ -176,7 +176,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .steps-sec{position:relative;overflow:hidden;padding:36px 0 90px;
     background:url("/staylo-confirm-bg.png") center top / cover no-repeat;}
   .steps-sec::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
-    background:linear-gradient(180deg, rgba(232,243,250,0.62) 0%, rgba(240,247,252,0.5) 22%, rgba(255,255,255,0.74) 58%, rgba(255,255,255,0.78) 100%);}
+    background:linear-gradient(180deg, #e9f6fc 0%, rgba(233,246,252,0.42) 6%, rgba(255,255,255,0.10) 16%, rgba(255,255,255,0.10) 60%, rgba(255,255,255,0.40) 80%, rgba(255,255,255,0.92) 94%, #fff 100%);}
   .steps-sec .wrap{position:relative;z-index:3;}
   /* steps — journey (gradient ribbon, 4 nodes) */
   .jr{position:relative;margin-top:8px;height:392px;z-index:3;}
