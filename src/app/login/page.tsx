@@ -11,7 +11,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
     background:linear-gradient(180deg,#cfe9f6 0%,#dcf1fb 40%,#eef9fd 72%,#fff 100%);
     display:flex;flex-direction:column;align-items:center;padding:0 24px;}
   .lg-nav{width:100%;max-width:1160px;display:flex;align-items:center;justify-content:space-between;padding:20px 4px;}
-  .logo{display:inline-flex;align-items:center;}
+  .logo{display:inline-flex;align-items:center;text-decoration:none;}
   .logo .w{font-weight:700;letter-spacing:-0.05em;color:var(--ink);font-size:26px;}
   .logo .sq{display:flex;align-items:center;justify-content:center;transform:rotate(-4deg);position:relative;
     overflow:hidden;border-radius:3px;margin-left:0.07em;width:28px;height:28px;}
@@ -20,7 +20,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .logo .o{position:absolute;z-index:2;font-weight:700;letter-spacing:-0.05em;line-height:1;
     left:50%;top:50%;transform:translate(-50%,-53%);font-size:22px;color:#fff;}
   .logo .o.oL{clip-path:inset(0 50% 0 0);} .logo .o.oR{clip-path:inset(0 0 0 50%);}
-  .lg-nav a.back{font-size:14px;font-weight:600;color:var(--ink);}
+  .lg-nav a.back{font-size:14px;font-weight:600;color:var(--ink);text-decoration:none;}
   .lg-card{background:#fff;border:1px solid var(--border);border-radius:20px;
     box-shadow:0 40px 90px -54px rgba(3,4,94,0.45);padding:40px 38px;width:100%;max-width:440px;margin:6vh 0 40px;}
   .lg-card h1{font-size:28px;font-weight:700;letter-spacing:-0.03em;color:var(--ink);margin:0 0 8px;}
