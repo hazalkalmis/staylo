@@ -214,7 +214,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
 
   @media(max-width:880px){.pv-body,.compare,.features,.score-row{grid-template-columns:1fr;}.nav-links{display:none;}
     .jr{height:auto;position:static;}.jr svg.path{display:none;}
-    .pt{position:static!important;width:auto;transform:none;margin:0 auto 26px;max-width:300px;}}`;
+    .pt{position:static!important;width:auto;transform:none;margin:0 auto 26px;max-width:300px;}}@media(max-width:520px){.nav-row{padding:12px 18px;}.nav-right{gap:11px;}.logo .w{font-size:24px;}.logo .sq{width:26px;height:26px;}.logo .o{font-size:20px;}.login{font-size:14px;white-space:nowrap;}.nav-right .btn{padding:9px 15px;font-size:13.5px;white-space:nowrap;}}`;
 
 const BODY = `
 <!-- ===== NAV ===== -->
