@@ -12,6 +12,16 @@ import { createClient } from '@/lib/supabase/client'
 export async function wireAuthNav(): Promise<void> {
   const loginEl = document.querySelector('nav .login') as HTMLAnchorElement | null
   if (!loginEl) return
+
+  // Girişsiz "Log in" linki, kullanıcıyı bulunduğu sayfaya geri döndürmek için
+  // mevcut path'i ?next= olarak taşır (kalp butonu / /saved guard ile tutarlı).
+  // Sadece güvenli iç path (open-redirect önleme); /login'in kendisini taşımayız.
+  const path = window.location.pathname
+  const loginHref =
+    path && path.startsWith('/') && !path.startsWith('//') && path !== '/login'
+      ? `/login?next=${encodeURIComponent(path)}`
+      : '/login'
+
   try {
     const supabase = createClient()
     const {
@@ -29,7 +39,7 @@ export async function wireAuthNav(): Promise<void> {
         window.location.href = '/'
       })
     } else {
-      loginEl.setAttribute('href', '/login')
+      loginEl.setAttribute('href', loginHref)
     }
   } catch {
     // sessiz — girişsiz varsayıp /login'e bırak
