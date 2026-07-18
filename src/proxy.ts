@@ -36,8 +36,8 @@ export async function updateSession(request: NextRequest) {
 // /results, /login, /auth/callback) public — arama akışı girişsiz çalışır.
 const PROTECTED_PREFIXES = ['/saved']
 
-// ↓↓↓ EKSİK OLAN KISIM — Next'in middleware'i bu
-export async function middleware(request: NextRequest) {
+// Next 16 proxy (eski adıyla middleware). proxy runtime'ı nodejs'tir (edge değil).
+export async function proxy(request: NextRequest) {
   const { supabaseResponse, user } = await updateSession(request)
 
   const path = request.nextUrl.pathname
