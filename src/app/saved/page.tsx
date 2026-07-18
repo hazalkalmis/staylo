@@ -81,7 +81,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .state p{font-size:15px;color:var(--muted);margin:0 0 18px;}
   .state a.cta{display:inline-flex;border:1px solid var(--ink);background:var(--ink);color:#fff;
     padding:12px 22px;border-radius:11px;font:600 14.5px 'Geist',sans-serif;}
-  @media(max-width:820px){.grid{grid-template-columns:1fr;}.cityfilter{margin-left:0;}}`;
+  @media(max-width:820px){.grid{grid-template-columns:1fr;}.cityfilter{margin-left:0;}}@media(max-width:520px){.nav-row{padding:12px 18px;}.nav-right{gap:11px;}.logo .w{font-size:24px;}.logo .sq{width:26px;height:26px;}.logo .o{font-size:20px;}.login{font-size:14px;white-space:nowrap;}.nav-right .btn{padding:9px 15px;font-size:13.5px;white-space:nowrap;}}`;
 
 type Favorite = {
   hotel_id: string;
