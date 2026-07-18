@@ -339,7 +339,7 @@ export default function SavedPage() {
                       <div className="gloc">{[f.city, f.country].filter(Boolean).join(", ")}</div>
                       <div className="gfoot">
                         <span className="gsaved">{saved || ""}</span>
-                        <a className="btn" href={bookingHref(f)} rel="nofollow sponsored">View on Booking →</a>
+                        <a className="btn" href={bookingHref(f)} target="_blank" rel="nofollow sponsored noopener noreferrer">View on Booking →</a>
                       </div>
                     </div>
                   </article>
