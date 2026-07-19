@@ -393,7 +393,6 @@ export default function ConfirmPage() {
     const MUST_OPTS = [
       { v:"breakfast_included",en:"Breakfast included",tr:"Kahvaltı dahil",       de:"Frühstück inklusive", fr:"Petit-déjeuner inclus", es:"Desayuno incluido" },
       { v:"free_wifi",       en:"Free WiFi",           tr:"Ücretsiz WiFi",        de:"Kostenloses WLAN",    fr:"WiFi gratuit",          es:"WiFi gratis" },
-      { v:"walk_to_centre",  en:"Walk to centre",      tr:"Merkeze yürüme",       de:"Zu Fuß ins Zentrum",  fr:"À pied du centre",      es:"A pie del centro" },
       { v:"air_conditioning",en:"Air conditioning",    tr:"Klima",                de:"Klimaanlage",         fr:"Climatisation",         es:"Aire acondicionado" },
       { v:"pool",            en:"Pool",                tr:"Havuz",                de:"Pool",                fr:"Piscine",               es:"Piscina" },
       { v:"pet_friendly",    en:"Pet-friendly",        tr:"Evcil hayvan dostu",   de:"Haustierfreundlich",  fr:"Animaux acceptés",      es:"Admite mascotas" },
@@ -401,11 +400,9 @@ export default function ConfirmPage() {
       { v:"free_parking",    en:"Free parking",        tr:"Ücretsiz otopark",     de:"Kostenlose Parkplätze",fr:"Parking gratuit",      es:"Parking gratis" },
       { v:"airport_shuttle", en:"Airport shuttle",     tr:"Havalimanı servisi",   de:"Flughafentransfer",   fr:"Navette aéroport",      es:"Traslado aeropuerto" },
       { v:"gym_fitness",     en:"Gym / fitness",       tr:"Spor salonu",          de:"Fitnessraum",         fr:"Salle de sport",        es:"Gimnasio" },
-      { v:"kitchenette",     en:"Kitchen / kitchenette",tr:"Mutfak",              de:"Küche / Küchenzeile", fr:"Cuisine / kitchenette", es:"Cocina / kitchenette" },
       { v:"reception_24h",   en:"24-hour reception",   tr:"24 saat resepsiyon",   de:"24-Stunden-Rezeption",fr:"Réception 24h/24",      es:"Recepción 24h" },
       { v:"non_smoking",     en:"Non-smoking",         tr:"Sigara içilmez",       de:"Nichtraucher",        fr:"Non-fumeur",            es:"No fumadores" },
       { v:"spa",             en:"Spa",                 tr:"Spa",                  de:"Spa",                 fr:"Spa",                   es:"Spa" },
-      { v:"balcony",         en:"Balcony",             tr:"Balkon",               de:"Balkon",              fr:"Balcon",                es:"Balcón" },
     ];
 
     const TAGSETS = {
@@ -753,6 +750,9 @@ export default function ConfirmPage() {
             currency: (F.budget && F.budget.currency) || "EUR",
           },
           weights: weights,
+          // Kullanıcının UI'da düzenlediği güncel must-have seçimi (eklediği/çıkardığı) —
+          // orijinal Gemini çıkarımı değil. /results bunu /api/hotels'e geçirir.
+          mustHaves: (TAGSETS.must.selected || []).slice(),
         });
         SD.ts = Date.now();
         try { sessionStorage.setItem("staylo_search", JSON.stringify(SD)); } catch(e) {}
