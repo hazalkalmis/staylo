@@ -864,6 +864,7 @@ export default function ResultPage() {
         if (F.budget && (F.budget.min != null || F.budget.max != null)) {
           payload.budget = { min: F.budget.min, max: F.budget.max, currency: F.budget.currency || "EUR" };
         }
+        if (Array.isArray(F.mustHaves) && F.mustHaves.length) payload.mustHaves = F.mustHaves;
         fetch("/api/hotels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: controller.signal })
           .then(async (res) => {
             if (cancelled) return;
@@ -875,6 +876,18 @@ export default function ResultPage() {
             const nights = Number(data.nights) > 0 ? Number(data.nights) : 1;
             if (resultsEl) resultsEl.innerHTML = hotels.map((h, i) => hotelCardHtml(h, i + 1, nights)).join("");
             renderHeader(hotels);
+            // Must-have gevşetildiyse (hepsini karşılayan az) dürüst not — mevcut nsEl'i kullanır.
+            if (data.mustHaves && data.mustHaves.relaxed) {
+              const nsEl = document.getElementById("rNoSignal");
+              if (nsEl) {
+                const n = data.mustHaves.matchedAll;
+                const msg = n > 0
+                  ? `Only ${n} hotel${n === 1 ? "" : "s"} here match all your must-haves — we've kept the closest matches too, ranked by how many they meet.`
+                  : `No hotels here list all your must-haves — we've kept the closest matches, ranked by how many they meet.`;
+                nsEl.innerHTML = `<span class="i">i</span><span>${msg}</span>`;
+                nsEl.className = "rnosignal show";
+              }
+            }
             setupFavorites(hotels);
             initMap(hotels);
           })

@@ -6,6 +6,7 @@ import { getTouristPlaces, type TouristData } from '@/lib/touristPlaces'
 import { haversineMeters, formatDistance } from '@/lib/geo'
 import { getHotelPhotoUrl } from '@/lib/hotelPhotos'
 import { getHotelAnalysis, computeWeightedScore, type HotelAnalysisData } from '@/lib/hotelAnalysis'
+import { facilityMustHaves, countFacilityMatches } from '@/lib/mustHaves'
 
 // ----------------------------------------------------------------------------
 // ⚠️ Rate limit ayarları — Nuitee çağrı maliyetine göre yeniden ayarlanacak.
@@ -49,6 +50,8 @@ const BodySchema = z
     weights: z.record(z.string(), z.number()).optional(),
     // Cloudflare Turnstile token'ı (/results widget'ından) — pahalı Nuitee+Gemini
     // skorlama endpoint'inde bot/rotasyonlu-IP koruması.
+    // Must-have olanaklar (filters'tan) — facility filtresi için. Boşsa hiç tetiklenmez.
+    mustHaves: z.array(z.string().trim().max(40)).max(20).optional().default([]),
     turnstileToken: z.string().optional(),
   })
   .refine((data) => !data.checkIn || !data.checkOut || new Date(data.checkOut) > new Date(data.checkIn), {
@@ -158,6 +161,8 @@ type NormalizedHotel = {
   price: { amount: number; perNight: number; currency: string } | null
   distanceToCenter: string | null
   nearbyAttractions: { name: string; distance: string; latitude: number; longitude: number }[]
+  // Otelin herhangi bir rate'i kahvaltı dahil mi (breakfast_included must-have'i için).
+  hasBreakfast: boolean
 }
 
 // ⚠️ Kullanıcıya inen skor gövdesi. Not: lowConfidence / havuz boyutu / dağılım
@@ -245,6 +250,21 @@ type HotelsParams = {
 // `data[]` (hotelId + roomTypes/rates, fiyat burada) ve `hotels[]` (id + name/
 // main_photo/address/latitude/longitude/stars, otel içeriği burada). İkisi
 // `hotelId` ↔ `id` üzerinden eşleşiyor, tek objede gelmiyor.
+// Otelin herhangi bir rate'i kahvaltı (ya da üstü: yarım/tam pansiyon, her şey dahil)
+// içeriyor mu? liteAPI board kodları: BB/BI (breakfast), HB (half), FB (full), AI.
+function rateHasBreakfast(raw: any): boolean {
+  const rts = raw?.roomTypes ?? []
+  for (const rt of rts) {
+    for (const r of rt?.rates ?? []) {
+      const bt = String(r?.boardType ?? '').toUpperCase()
+      const bn = String(r?.boardName ?? '').toLowerCase()
+      if (['BB', 'BI', 'HB', 'FB', 'AI'].includes(bt)) return true
+      if (/breakfast|half board|full board|all.?inclusive/.test(bn)) return true
+    }
+  }
+  return false
+}
+
 function normalizeHotel(raw: any, hotelMeta: any, nights: number): NormalizedHotel {
   const firstRate = raw?.roomTypes?.[0]?.rates?.[0]
   const totalAmount = firstRate?.retailRate?.total?.[0]
@@ -252,6 +272,7 @@ function normalizeHotel(raw: any, hotelMeta: any, nights: number): NormalizedHot
 
   return {
     id: String(raw?.hotelId ?? ''),
+    hasBreakfast: rateHasBreakfast(raw),
     name: hotelMeta?.name ?? 'Unknown hotel',
     address: hotelMeta?.address ?? null,
     latitude: hotelMeta?.latitude ?? null,
@@ -387,6 +408,39 @@ async function fetchNuiteeHotels(params: HotelsParams): Promise<NuiteeFetchResul
   return { ok: true, hotels }
 }
 
+// Aday otellerin facilityIds'lerini TEK batch çağrıyla çeker (/data/hotels?hotelIds=…).
+// ~0.35–0.5s (otel sayısından ~bağımsız). Best-effort: hata olursa boş Map döner →
+// must-have filtresi uygulanmaz, arama bozulmaz. SADECE facility-must-have varken çağrılır.
+async function fetchHotelFacilityIds(hotelIds: string[]): Promise<Map<string, number[]>> {
+  const map = new Map<string, number[]>()
+  const apiKey = process.env.NUITEE_API_KEY
+  const ids = hotelIds.filter(Boolean)
+  if (!apiKey || ids.length === 0) return map
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), NUITEE_TIMEOUT_MS)
+  try {
+    const url = `${NUITEE_BASE_URL}/data/hotels?hotelIds=${encodeURIComponent(ids.join(','))}`
+    const res = await fetch(url, { headers: { 'X-API-Key': apiKey }, signal: controller.signal })
+    if (!res.ok) {
+      console.error('Facility fetch non-OK:', res.status)
+      return map
+    }
+    const json = await res.json()
+    const arr: any[] = Array.isArray(json?.data) ? json.data : []
+    for (const h of arr) {
+      if (h?.id != null && Array.isArray(h.facilityIds)) {
+        map.set(String(h.id), h.facilityIds.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x)))
+      }
+    }
+  } catch (err) {
+    console.error('Facility fetch failed (best-effort):', err instanceof Error ? err.message : err)
+  } finally {
+    clearTimeout(timeout)
+  }
+  return map
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 1) ⚠️ Input validasyonu
@@ -398,7 +452,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    const { latitude, longitude, budget, city, country, weights } = parsed.data
+    const { latitude, longitude, budget, city, country, weights, mustHaves } = parsed.data
 
     // 2) ⚠️ Koordinat kontrolü (yalnızca lat/lng ile arandığında geçerli)
     if (latitude != null && longitude != null && isNullIsland(latitude, longitude)) {
@@ -469,6 +523,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ hotels: [], message: 'No hotels found for this search.' })
     }
 
+    // 5b) ⚠️ Must-have filtresi — SADECE kullanıcı must-have seçtiyse çalışır (çoğunluk
+    // senaryoda mustHaves boş → hiç tetiklenmez, akış birebir eskisi gibi, sıfır ek gecikme).
+    // Facility'ler tek batch çağrıyla; breakfast rate board'undan. Skorlamadan (Gemini) ÖNCE
+    // filtreleriz → daha az otel skorlanır (kota tasarrufu). Fallback'li SERT filtre: hepsini
+    // karşılayan yeterliyse (≥ MIN) onları tut; azsa "no hotels found" tuzağına düşmemek için
+    // gevşet — en çok eşleşeni öne al, hepsini göster, relaxed notu döndür.
+    let mustHavesMeta: { requested: number; matchedAll: number; relaxed: boolean } | null = null
+    const facMH = facilityMustHaves(mustHaves)
+    const wantBreakfast = mustHaves.includes('breakfast_included')
+    const totalReq = facMH.length + (wantBreakfast ? 1 : 0)
+    if (totalReq > 0 && hotels.length > 0) {
+      const facMap = facMH.length > 0 ? await fetchHotelFacilityIds(hotels.map((h) => h.id)) : new Map<string, number[]>()
+      // Facility must-have var ama veri hiç gelmediyse (API hatası): filtre uygulama,
+      // yanıltıcı "relaxed" notu gösterme — aramayı bozmadan tüm otellerle devam et.
+      const facilityDataOk = facMH.length === 0 || facMap.size > 0
+      if (facilityDataOk) {
+        const MIN_MUSTHAVE_RESULTS = 4
+        const withMatch = hotels.map((h) => {
+          const fids = facMap.get(h.id) ?? []
+          let m = countFacilityMatches(fids, mustHaves)
+          if (wantBreakfast && h.hasBreakfast) m += 1
+          ;(h as any).mmatch = m
+          return { h, m }
+        })
+        const full = withMatch.filter((x) => x.m === totalReq)
+        if (full.length >= MIN_MUSTHAVE_RESULTS) {
+          hotels = full.map((x) => x.h)
+          mustHavesMeta = { requested: totalReq, matchedAll: full.length, relaxed: false }
+        } else {
+          hotels = withMatch.slice().sort((a, b) => b.m - a.m).map((x) => x.h)
+          mustHavesMeta = { requested: totalReq, matchedAll: full.length, relaxed: true }
+        }
+      }
+    }
+
     // 6) Turistik yer / mesafe zenginleştirmesi (best-effort).
     // Şu an sadece city+country ile aramada mümkün — lat/lng ile arandığında
     // (Mapbox bağlanınca) şehir adı yok, reverse-geocoding henüz kapsam dışı.
@@ -515,13 +604,20 @@ export async function POST(request: NextRequest) {
     )
 
     // Staylo fit'e göre sırala (skoru olan üstte, yüksek fit önce; skorsuzlar en sonda).
+    // Relaxed must-have durumunda ÖNCE eşleşme sayısı (çok karşılayan üstte), sonra fit —
+    // böylece gevşetince bile must-have'i en çok tutan oteller öne çıkar.
     scored.sort((a, b) => {
+      if (mustHavesMeta?.relaxed) {
+        const am = (a as any).mmatch ?? 0
+        const bm = (b as any).mmatch ?? 0
+        if (bm !== am) return bm - am
+      }
       const av = a.score?.fit ?? -1
       const bv = b.score?.fit ?? -1
       return bv - av
     })
 
-    return NextResponse.json({ hotels: scored, nights })
+    return NextResponse.json({ hotels: scored, nights, mustHaves: mustHavesMeta })
   } catch (error) {
     console.error('Hotels API error:', error)
     return NextResponse.json(
