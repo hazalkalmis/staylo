@@ -19,7 +19,6 @@ const FETCH_TIMEOUT_MS = 10_000
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 const GOOGLE_DETAILS_URL = 'https://maps.googleapis.com/maps/api/place/details/json'
-const TRIPADVISOR_BASE_URL = 'https://terra.tripadvisor.com/api'
 
 // Gemini'ye gönderilen havuz üst sınırı (token maliyeti için) — dağılım
 // istatistikleri her zaman TÜM havuzdan hesaplanır, sadece metin gövdesi sınırlı.
@@ -29,11 +28,9 @@ const MAX_CORPUS_REVIEWS = 60
 // etiketi GÖSTERİLMEZ; güvenilirliği zedeler, kararı kullanıcıya bırakırız).
 const MIN_TOTAL_REVIEWS = 10
 
-// ⚠️ Günlük kod tarafı maliyet tavanları (bkz. apiUsage.ts). Eşik dolunca o
-// kaynak o gün atlanır, otel diğer kaynaktan + birikmiş havuzdan skorlanır.
-// Terra: entity bazlı (~$0.015/entity → ~130 = ~$2/gün). Otel başına ~2 entity.
+// ⚠️ Günlük kod tarafı maliyet tavanı (bkz. apiUsage.ts). Eşik dolunca Google
+// o gün atlanır, otel birikmiş havuzdan skorlanır.
 // Google: çağrı bazlı yumuşak fren (Cloud'daki 5.000 sert quota'dan önce).
-const TERRA_DAILY_CAP = 130
 const GOOGLE_DAILY_CAP = 2000
 
 // Skorlanan kriterler. İlk 6 = kullanıcı weight anahtarlarıyla birebir aynı →
@@ -44,11 +41,10 @@ type ScoreCriterion = (typeof SCORE_CRITERIA)[number]
 
 // ---- Aggregate (rating + toplam sayı) — hotel_analysis'te tutulur ----------
 export type GoogleData = { placeId: string; rating: number | null; reviewCount: number | null }
-export type TripadvisorData = { locationId: string; rating: number | null; reviewCount: number | null }
 
-// ---- Ham yorum — hotel_reviews havuzuna yazılır ----------------------------
+// ---- Ham yorum — hotel_reviews havuzuna yazılır (yalnız Google) -------------
 type RawReview = {
-  source: 'google' | 'tripadvisor'
+  source: 'google'
   reviewKey: string
   rating: number | null
   text: string | null
@@ -68,7 +64,6 @@ export type GeminiScores = {
 
 export type HotelAnalysisData = {
   google: GoogleData | null
-  tripadvisor: TripadvisorData | null
   geminiScores: GeminiScores | null
   totalReviewCount: number
   poolSize: number
@@ -155,67 +150,6 @@ async function fetchGoogle(
   }
 }
 
-// ----------------------------------------------------------------------------
-// Tripadvisor Terra: Catalog Search (size=1, allowlist'siz) → location_id +
-// overall_rating. Sonra reviews (Discover'da 2-3 mevcut). review_key = yorum id.
-// ----------------------------------------------------------------------------
-async function fetchTripadvisor(
-  name: string,
-  countryCode: string | null
-): Promise<{ aggregate: TripadvisorData | null; reviews: RawReview[]; entities: number }> {
-  const apiKey = process.env.TRIPADVISOR_API_KEY
-  if (!apiKey) return { aggregate: null, reviews: [], entities: 0 }
-
-  // size=1: billable entity dönen HER location ID başına sayılıyor — ilk aday yeter.
-  const searchParams = new URLSearchParams({ query: name, category: 'HOTEL', size: '1' })
-  if (countryCode) searchParams.set('country_code', countryCode)
-
-  const searchRes = await fetchWithTimeout(
-    `${TRIPADVISOR_BASE_URL}/catalog/locations/search?${searchParams.toString()}`,
-    { headers: { 'X-API-Key': apiKey } }
-  )
-  if (!searchRes.ok) throw new Error(`Tripadvisor catalog search responded ${searchRes.status}`)
-  const searchData = await searchRes.json()
-  const location = searchData.data?.[0]?.location
-  // Eşleşme yoksa 0 location döndü → 0 billable entity.
-  if (!location?.id) return { aggregate: null, reviews: [], entities: 0 }
-
-  const locationId = String(location.id)
-  const overall = location.overall_rating ?? {}
-
-  let reviews: RawReview[] = []
-  try {
-    const reviewsRes = await fetchWithTimeout(`${TRIPADVISOR_BASE_URL}/locations/${locationId}/reviews?size=5`, {
-      headers: { 'X-API-Key': apiKey },
-    })
-    if (reviewsRes.ok) {
-      const rd = await reviewsRes.json()
-      reviews = (Array.isArray(rd.data) ? rd.data : [])
-        .filter((r: any) => r.id != null)
-        .map((r: any) => ({
-          source: 'tripadvisor' as const,
-          reviewKey: String(r.id),
-          rating: typeof r.rating === 'number' ? r.rating : null,
-          text: [r.title?.[0]?.value, r.text?.[0]?.value].filter(Boolean).join(' — ') || null,
-          date: r.publish_ts ?? null,
-        }))
-    } else {
-      console.error('Tripadvisor reviews responded', reviewsRes.status, 'for', locationId)
-    }
-  } catch (err) {
-    console.error('Tripadvisor reviews fetch failed:', err instanceof Error ? err.message : err)
-  }
-
-  return {
-    aggregate: {
-      locationId,
-      rating: typeof overall.rating === 'number' ? overall.rating : null,
-      reviewCount: typeof overall.count === 'number' ? overall.count : null,
-    },
-    reviews,
-    entities: 2, // 1 catalog search (1 location döndü) + 1 reviews çağrısı
-  }
-}
 
 // ----------------------------------------------------------------------------
 // Havuz (hotel_reviews) — UPSERT (çakışan review_key atlanır) + oku.
@@ -355,8 +289,8 @@ function ttlForTotal(totalReviewCount: number): number {
   return 7 * 24 * 60 * 60_000 // 7 gün
 }
 
-function total(google: GoogleData | null, tripadvisor: TripadvisorData | null): number {
-  return (google?.reviewCount ?? 0) + (tripadvisor?.reviewCount ?? 0)
+function total(google: GoogleData | null): number {
+  return google?.reviewCount ?? 0
 }
 
 // ----------------------------------------------------------------------------
@@ -373,20 +307,18 @@ export async function getHotelAnalysis(
 
   const { data: row, error } = await supabaseAdmin
     .from('hotel_analysis')
-    .select('google_data, tripadvisor_data, gemini_scores, created_at')
+    .select('google_data, gemini_scores, created_at')
     .eq('hotel_id', hotelId)
     .maybeSingle()
   if (error) console.error('hotel_analysis select error:', error.message)
 
   const pack = (
     google: GoogleData | null,
-    tripadvisor: TripadvisorData | null,
     geminiScores: GeminiScores | null
   ): HotelAnalysisData => {
-    const t = total(google, tripadvisor)
+    const t = total(google)
     return {
       google,
-      tripadvisor,
       geminiScores,
       totalReviewCount: t,
       poolSize: geminiScores?.poolSize ?? 0,
@@ -395,49 +327,42 @@ export async function getHotelAnalysis(
   }
 
   const prevGoogle = (row?.google_data as GoogleData | null) ?? null
-  const prevTa = (row?.tripadvisor_data as TripadvisorData | null) ?? null
   const prevScores = (row?.gemini_scores as GeminiScores | null) ?? null
 
-  const ttl = ttlForTotal(total(prevGoogle, prevTa))
+  const ttl = ttlForTotal(total(prevGoogle))
   const isFresh = !!row && now - new Date(row.created_at).getTime() < ttl && !!prevScores
-  if (isFresh) return pack(prevGoogle, prevTa, prevScores)
+  if (isFresh) return pack(prevGoogle, prevScores)
 
   // Bayat/eksik → yeni yorumları çek. Önce günlük maliyet tavanını kontrol et;
   // dolu olan kaynak atlanır (fail-safe — diğer kaynak + havuz yine skorlar).
-  const [googleUsage, terraUsage, geminiUsage] = await Promise.all([
+  const [googleUsage, geminiUsage] = await Promise.all([
     getDailyUsage('google'),
-    getDailyUsage('tripadvisor'),
     getDailyUsage('gemini'),
   ])
   const googleAllowed = googleUsage < GOOGLE_DAILY_CAP
-  const terraAllowed = terraUsage < TERRA_DAILY_CAP
   const geminiAllowed = geminiUsage < GEMINI_DAILY_CAP
   if (!googleAllowed) console.error(`[BUDGET] google günlük tavan dolu (${googleUsage}/${GOOGLE_DAILY_CAP}) — atlanıyor`)
-  if (!terraAllowed) console.error(`[BUDGET] tripadvisor günlük tavan dolu (${terraUsage}/${TERRA_DAILY_CAP}) — atlanıyor`)
   if (!geminiAllowed) console.error(`[BUDGET] gemini günlük tavan dolu (${geminiUsage}/${GEMINI_DAILY_CAP}) — skorlama atlanıyor, cache/havuz kullanılıyor`)
 
-  const [gRes, tRes] = await Promise.allSettled([
+  // ⚠️ Tripadvisor Terra tamamen kaldırıldı (ToS: AI kullanımı + commingling +
+  // review text saklama kısıtları). Skorlama artık YALNIZ Google yorumlarıyla.
+  const [gRes] = await Promise.allSettled([
     googleAllowed ? fetchGoogle(name, address) : Promise.resolve(null),
-    terraAllowed ? fetchTripadvisor(name, countryCode) : Promise.resolve(null),
   ])
   const gOut = gRes.status === 'fulfilled' ? gRes.value : (console.error('Google fetch failed:', gRes.reason), null)
-  const tOut = tRes.status === 'fulfilled' ? tRes.value : (console.error('Tripadvisor fetch failed:', tRes.reason), null)
 
-  // Gerçekte tüketilen birimleri kaydet (başarısız/atlanan = 0).
   if (gOut && gOut.calls > 0) await recordUsage('google', gOut.calls, GOOGLE_DAILY_CAP)
-  if (tOut && tOut.entities > 0) await recordUsage('tripadvisor', tOut.entities, TERRA_DAILY_CAP)
 
   // Aggregate: bu çağrı başarısızsa önceki değeri koru (totalReviewCount stabil kalsın)
   const google = gOut?.aggregate ?? prevGoogle
-  const tripadvisor = tOut?.aggregate ?? prevTa
 
-  // Havuza biriktir (çakışan atlanır)
-  const fetched = [...(gOut?.reviews ?? []), ...(tOut?.reviews ?? [])]
+  // Havuza biriktir (çakışan atlanır) — yalnız Google
+  const fetched = [...(gOut?.reviews ?? [])]
   await upsertReviewPool(hotelId, fetched)
 
   // TÜM birikmiş havuzu oku → skorla
   const pool = await readReviewPool(hotelId)
-  if (pool.length === 0) return pack(google, tripadvisor, prevScores) // hiç yorum yok, yazma
+  if (pool.length === 0) return pack(google, prevScores) // hiç yorum yok, yazma
 
   const dist = computeDistribution(pool)
   // Gemini skorlama global tavana takılıysa çağrı YAPMA — eski skorları/cache'i koru
@@ -456,7 +381,7 @@ export async function getHotelAnalysis(
     .upsert({
       hotel_id: hotelId,
       google_data: google,
-      tripadvisor_data: tripadvisor,
+      tripadvisor_data: null, // Terra kaldırıldı — mevcut satırlarda kalan TA aggregate'i tazelemede temizle
       gemini_scores: geminiScores,
       created_at: new Date(now).toISOString(),
     })
@@ -464,7 +389,7 @@ export async function getHotelAnalysis(
       if (e) console.error('hotel_analysis upsert error:', e.message)
     })
 
-  return pack(google, tripadvisor, geminiScores)
+  return pack(google, geminiScores)
 }
 
 // ----------------------------------------------------------------------------

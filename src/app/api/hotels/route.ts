@@ -181,7 +181,7 @@ type SourceRating = { rating: number; reviewCount: number | null }
 
 type ScoredHotel = NormalizedHotel & {
   score: ScorePayload
-  sources: { google: SourceRating | null; tripadvisor: SourceRating | null }
+  sources: { google: SourceRating | null }
 }
 
 // search default'larıyla aynı — hiç ağırlık gelmezse dengeli varsayılan.
@@ -225,12 +225,8 @@ function buildScoreFields(analysis: HotelAnalysisData, weights: Record<string, n
     analysis.google && typeof analysis.google.rating === 'number'
       ? { rating: analysis.google.rating, reviewCount: analysis.google.reviewCount }
       : null
-  const tripadvisor =
-    analysis.tripadvisor && typeof analysis.tripadvisor.rating === 'number'
-      ? { rating: analysis.tripadvisor.rating, reviewCount: analysis.tripadvisor.reviewCount }
-      : null
 
-  return { score, sources: { google, tripadvisor } }
+  return { score, sources: { google } }
 }
 
 type HotelsParams = {
@@ -583,8 +579,8 @@ export async function POST(request: NextRequest) {
       })
     )
 
-    // 8) ⚠️ Skorlama: her otel için birikmiş yorum analizi (Google + Tripadvisor +
-    // Gemini, TTL cache'li) → kullanıcı ağırlıklarıyla Staylo fit skoru. Analiz
+    // 8) ⚠️ Skorlama: her otel için birikmiş Google yorum analizi (Gemini, TTL
+    // cache'li) → kullanıcı ağırlıklarıyla Staylo fit skoru. Analiz
     // başarısız/eksik olursa otel skorsuz iner (kart kırılmaz). country → ISO-2.
     const activeWeights =
       weights && Object.values(weights).some((v) => Number.isFinite(v) && v > 0) ? weights : DEFAULT_WEIGHTS
@@ -598,7 +594,7 @@ export async function POST(request: NextRequest) {
           return { ...h, score, sources }
         } catch (err) {
           console.error('Hotel analysis failed for', h.id, err instanceof Error ? err.message : err)
-          return { ...h, score: null, sources: { google: null, tripadvisor: null } }
+          return { ...h, score: null, sources: { google: null } }
         }
       })
     )

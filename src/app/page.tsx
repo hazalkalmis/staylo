@@ -457,7 +457,7 @@ const BODY = `
   <div class="wrap footer-row">
     <span class="logo lg"><span class="w">stayl</span><span class="sq"><span class="h l"></span><span class="h r"></span><span class="o oL">o</span><span class="o oR">o</span></span></span>
     <div class="links"><a href="#how">How it works</a><a href="#score">The score</a><a href="#faq">FAQ</a><a href="/search">Try it</a></div>
-    <span style="font-size:11.5px;letter-spacing:0.02em;">© 2026 Staylo · Reviews from Google &amp; Tripadvisor · Bookings via Booking.com</span>
+    <span style="font-size:11.5px;letter-spacing:0.02em;">© 2026 Staylo · Reviews from Google · Bookings via Booking.com</span>
   </div>
 </footer>
 `;

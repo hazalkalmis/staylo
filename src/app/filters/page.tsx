@@ -324,7 +324,7 @@ const BODY = `
 <footer>
   <div class="footer-row">
     <a href="/" class="logo"><span class="w" style="font-size:24px">stayl</span><span class="sq" style="width:26px;height:26px"><span class="h l"></span><span class="h r"></span><span class="o oL" style="font-size:20px">o</span><span class="o oR" style="font-size:20px">o</span></span></a>
-    <span style="font-size:11.5px;">© 2026 Staylo · Reviews from Google &amp; Tripadvisor · Bookings via Booking.com</span>
+    <span style="font-size:11.5px;">© 2026 Staylo · Reviews from Google · Bookings via Booking.com</span>
   </div>
 </footer>
 `;
