@@ -335,7 +335,7 @@ const BODY = `
 <footer>
   <div class="footer-row">
     <a href="/" class="logo"><span class="w" style="font-size:24px">stayl</span><span class="sq" style="width:26px;height:26px"><span class="h l"></span><span class="h r"></span><span class="o oL" style="font-size:20px">o</span><span class="o oR" style="font-size:20px">o</span></span></a>
-    <span style="font-size:11.5px;">© 2026 Staylo · Reviews from Google &amp; Tripadvisor · Bookings via Booking.com</span>
+    <span style="font-size:11.5px;">© 2026 Staylo · Reviews from Google · Bookings via Booking.com</span>
   </div>
 </footer>
 `;
@@ -539,35 +539,6 @@ export default function ResultPage() {
       }).join("");
       return `<div class="ribbon">${cells}</div>`;
     }
-    // Tripadvisor owl (Ollie) — Display Requirements: kaynak atfı için logo zorunlu.
-    const taOwl = `<svg width="24" height="15" viewBox="0 0 42 24" aria-label="Tripadvisor" style="flex:0 0 auto">
-      <circle cx="12" cy="12" r="11" fill="#00aa6c"></circle>
-      <circle cx="30" cy="12" r="11" fill="#00aa6c"></circle>
-      <circle cx="12" cy="12" r="6.6" fill="#fff"></circle>
-      <circle cx="30" cy="12" r="6.6" fill="#fff"></circle>
-      <circle cx="12" cy="12" r="3" fill="#004f32"></circle>
-      <circle cx="30" cy="12" r="3" fill="#004f32"></circle>
-      <path d="M17 12 L25 12 L21 18 Z" fill="#00aa6c"></path>
-    </svg>`;
-    let BUBID = 0;
-    // Tripadvisor bubble rating (5 baloncuk, orana göre yeşil dolgu) — zorunlu atıf biçimi.
-    function taBubbles(rating) {
-      const n = 5, r = 3.4, gap = 9.2, pad = r;
-      const cx = (i) => pad + gap * i;
-      const w = cx(n - 1) + r, h = 2 * r;
-      const frac = Math.max(0, Math.min(1, rating / 5));
-      const id = "tab" + (BUBID++);
-      let empty = "", full = "";
-      for (let i = 0; i < n; i++) {
-        empty += `<circle cx="${cx(i)}" cy="${r}" r="${r}" fill="#d4dde2"></circle>`;
-        full += `<circle cx="${cx(i)}" cy="${r}" r="${r}" fill="#00aa6c"></circle>`;
-      }
-      return `<svg width="${(w * 1.7).toFixed(0)}" height="${(h * 1.7).toFixed(0)}" viewBox="0 0 ${w.toFixed(1)} ${h.toFixed(1)}" style="flex:0 0 auto">
-        <defs><clipPath id="${id}"><rect x="0" y="0" width="${(w * frac).toFixed(2)}" height="${h}"></rect></clipPath></defs>
-        ${empty}
-        <g clip-path="url(#${id})">${full}</g>
-      </svg>`;
-    }
     function sourcesHtml(sources) {
       if (!sources || typeof sources !== "object") return "";
       const rows = [];
@@ -577,15 +548,6 @@ export default function ResultPage() {
         rows.push(`<div class="src-row" title="Rating from Google">
           <span class="src-glyph g">G</span>
           <span class="src-line"><b>${fmtScore(g.rating)}</b>★${cnt ? `<span style="color:var(--muted);font-size:11px;margin-left:3px;">${cnt}</span>` : ""}</span>
-        </div>`);
-      }
-      const t = sources.tripadvisor;
-      if (t && typeof t.rating === "number") {
-        // Tripadvisor eşleşmesi yoksa bu satır hiç render edilmez → sadece Google gösterilir, kırılma olmaz.
-        const cnt = fmtCount(t.reviewCount);
-        rows.push(`<div class="src-row" title="Rating from Tripadvisor">
-          ${taOwl}${taBubbles(t.rating)}
-          <span class="src-line"><b>${fmtScore(t.rating)}</b>${cnt ? `<span style="color:var(--muted);font-size:11px;margin-left:3px;">${cnt}</span>` : ""}</span>
         </div>`);
       }
       if (!rows.length) return "";
@@ -636,18 +598,17 @@ export default function ResultPage() {
       const sEl = document.getElementById("rSub");
       if (!sEl) return;
       if (!hotelList) { sEl.textContent = "Scoring hotels on your priorities…"; return; }
-      // Gerçek toplam yorum: her otelin Google + Tripadvisor count'ları (elimizdeki veriden).
+      // Gerçek toplam yorum: her otelin Google count'ı (elimizdeki veriden).
       let totalReviews = 0;
       for (const h of hotelList) {
         const s = h.sources || {};
         if (s.google && typeof s.google.reviewCount === "number") totalReviews += s.google.reviewCount;
-        if (s.tripadvisor && typeof s.tripadvisor.reviewCount === "number") totalReviews += s.tripadvisor.reviewCount;
       }
       const n = hotelList.length;
       const hotelTxt = `<b>${n} ${n === 1 ? "hotel" : "hotels"}</b>${city ? ` in ${esc(city)}` : ""}`;
       const rev = fmtReviews(totalReviews);
       sEl.innerHTML = rev
-        ? `Based on <b>${rev} reviews</b> from Google &amp; Tripadvisor across ${hotelTxt}, scored on your priorities.`
+        ? `Based on <b>${rev} reviews</b> from Google across ${hotelTxt}, scored on your priorities.`
         : `Scored ${hotelTxt} on your priorities.`;
 
       // Genel sinyal-yok banner'ı: kullanıcının ağırlık verdiği (weight>0) bir kriter
@@ -711,7 +672,7 @@ export default function ResultPage() {
       const badgeHtml = fit != null
         ? `<div class="rbadge" style="background:${fitBg(fit)}">${fmtScore(fit)}</div>
            <div class="rblabel">Staylo fit
-             <span class="info">i<span class="tip">Weighted 0–10 score from guest reviews across Google &amp; Tripadvisor. Criteria with no review signal are excluded and their weight redistributed.</span></span>
+             <span class="info">i<span class="tip">Weighted 0–10 score from guest reviews on Google. Criteria with no review signal are excluded and their weight redistributed.</span></span>
            </div>`
         : score
         ? `<div class="rnofit">Not enough review data to score this hotel on your priorities.</div>`
