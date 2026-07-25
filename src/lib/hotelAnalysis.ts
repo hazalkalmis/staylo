@@ -217,7 +217,13 @@ async function computeGeminiScores(pool: PoolReview[], dist: ReviewDistribution)
   const corpus = buildCorpus(pool)
   if (!corpus.trim()) return null
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' })
+  // ⚠️ Determinizm: temperature:0 + sabit seed → run-to-run varyans (skor/noSignal
+  // flip'i) belirgin azalır; aynı havuz aynı skoru verir. (seed yeni API alanı;
+  // SDK desteklemezse yok sayılır, temperature:0 asıl kaldıracı sağlar.)
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-flash-latest',
+    generationConfig: { temperature: 0, seed: 7 } as any,
+  })
   const prompt = `You are a hotel review analyst. Based ONLY on the guest reviews below, score this hotel on each criterion from 0 to 10 (10 = excellent). Weigh the full set; do not let a single outlier dominate. If the reviews contain NO meaningful signal about a criterion, do NOT score it — omit its key entirely AND add its name to "insufficientSignal". Never guess and never use a neutral/middle default for an unmentioned criterion. Return ONLY valid JSON, no markdown.
 
 Review distribution (for calibration): ${dist.total} reviews analyzed — ${dist.positive} positive, ${dist.negative} negative, ${dist.neutral} neutral.

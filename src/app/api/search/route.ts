@@ -147,7 +147,11 @@ export async function POST(request: NextRequest) {
     // Nuitee geçmiş tarihe müsaitlik döndürmüyor → "No hotels found". Tarih
     // runtime'da hesaplanır (deploy'da sabitlenmez).
     const today = new Date().toISOString().slice(0, 10) // UTC YYYY-MM-DD
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' })
+    // Determinizm: temperature:0 + sabit seed → aynı sorgu aynı çıkarımı verir.
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-flash-latest',
+      generationConfig: { temperature: 0, seed: 7 } as any,
+    })
     const prompt = `Extract hotel search filters from this query. Return ONLY valid JSON, no markdown, no explanation.
 
 Today's date is ${today}.
