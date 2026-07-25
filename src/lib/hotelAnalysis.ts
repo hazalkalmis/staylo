@@ -3,16 +3,29 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { findGooglePlace } from '@/lib/googlePlace'
 import { getDailyUsage, recordUsage, GEMINI_DAILY_CAP } from '@/lib/apiUsage'
+import {
+  type GeminiScores,
+  type SignalAgg,
+  WEIGHTED_CRITERIA,
+  emptyAgg,
+  decayAgg,
+  addBatch,
+  deriveScores,
+  buildExtractionPrompt,
+  parseExtraction,
+  getPepper,
+  dedupHash,
+} from '@/lib/reviewSignals'
 
 // ============================================================================
 // ⚠️⚠️⚠️ STAYLO ÇEKİRDEĞİ — TAKLİT EDİLEMEZ KISIM ⚠️⚠️⚠️
-// Gemini skorlama prompt'u + tüm ağırlık/skor mantığı SADECE server'da
-// ('server-only' garantisi) — asla tarayıcıya inmez. Kopyalanma koruması.
+// No-store skorlama: ham yorum metni ASLA saklanmaz (Google "kopyala-sakla"
+// yasağı). Her tazelemede yeni yorumlar RAM'de çıkarılır (per-kriter + per-
+// aspect sentiment), hotel-seviyesi ZAMAN-SÖNÜMLÜ (EMA) toplamlara karışır,
+// sonra metin + kimlik atılır. Dedup için sadece server-gizli PEPPER'lı opak
+// hash (processed_reviews) tutulur — yorumun kimliği/tarihi HİÇ saklanmaz.
 //
-// Birikimli yorum havuzu: Google/Tripadvisor geçmişe toplu erişim vermiyor,
-// bu yüzden her tazelemede en yeni yorumlar hotel_reviews'e UPSERT edilir
-// (çakışan atlanır) ve havuz ZAMANLA büyür. Skorlama snapshot değil, birikmiş
-// havuzun tamamını kullanır → skor kalitesi kendiliğinden artar.
+// Tüm skorlama mantığı SADECE server'da ('server-only') — asla tarayıcıya inmez.
 // ============================================================================
 
 const FETCH_TIMEOUT_MS = 10_000
@@ -20,46 +33,25 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 const GOOGLE_DETAILS_URL = 'https://maps.googleapis.com/maps/api/place/details/json'
 
-// Gemini'ye gönderilen havuz üst sınırı (token maliyeti için) — dağılım
-// istatistikleri her zaman TÜM havuzdan hesaplanır, sadece metin gövdesi sınırlı.
-const MAX_CORPUS_REVIEWS = 60
-
 // Yeterli veri eşiği — SADECE iç skorlama kalitesi için (kullanıcıya "az veri"
-// etiketi GÖSTERİLMEZ; güvenilirliği zedeler, kararı kullanıcıya bırakırız).
+// etiketi GÖSTERİLMEZ; kararı kullanıcıya bırakırız).
 const MIN_TOTAL_REVIEWS = 10
 
-// ⚠️ Günlük kod tarafı maliyet tavanı (bkz. apiUsage.ts). Eşik dolunca Google
-// o gün atlanır, otel birikmiş havuzdan skorlanır.
-// Google: çağrı bazlı yumuşak fren (Cloud'daki 5.000 sert quota'dan önce).
+// ⚠️ Günlük kod tarafı maliyet tavanı (bkz. apiUsage.ts). Google: çağrı bazlı
+// yumuşak fren (Cloud'daki sert quota'dan önce).
 const GOOGLE_DAILY_CAP = 2000
-
-// Skorlanan kriterler. İlk 6 = kullanıcı weight anahtarlarıyla birebir aynı →
-// ağırlıklı toplam bunlar üzerinden. 'staff' skorlanır ama henüz weight'i yok.
-const WEIGHTED_CRITERIA = ['safety', 'quiet', 'family', 'value', 'walkability', 'cleanliness'] as const
-const SCORE_CRITERIA = [...WEIGHTED_CRITERIA, 'staff'] as const
-type ScoreCriterion = (typeof SCORE_CRITERIA)[number]
 
 // ---- Aggregate (rating + toplam sayı) — hotel_analysis'te tutulur ----------
 export type GoogleData = { placeId: string; rating: number | null; reviewCount: number | null }
 
-// ---- Ham yorum — hotel_reviews havuzuna yazılır (yalnız Google) -------------
+// gemini_scores şekli reviewSignals'ten gelir; api/hotels + UI değişmez.
+export type { GeminiScores } from '@/lib/reviewSignals'
+
+// ---- Ham yorum — SADECE RAM'de dolaşır, ASLA yazılmaz -----------------------
 type RawReview = {
-  source: 'google'
-  reviewKey: string
+  reviewKey: string // "author_url|time" — sadece dedup hash'i için, saklanmaz
   rating: number | null
   text: string | null
-  date: string | null // ISO
-}
-
-export type ReviewDistribution = { total: number; positive: number; negative: number; neutral: number }
-
-// Gemini çıktısı + iç metadata (dağılım, havuz boyutu — kullanıcıya inmez).
-export type GeminiScores = {
-  scores: Partial<Record<ScoreCriterion, number>>
-  noSignal: ScoreCriterion[] // yorumlarda anlamlı sinyali olmayan → skorlanmadı (5.0 default YOK)
-  summary: string | null
-  distribution: ReviewDistribution
-  poolSize: number
 }
 
 export type HotelAnalysisData = {
@@ -84,8 +76,8 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
 
 // ----------------------------------------------------------------------------
 // Google Place Details. most_relevant(5) + newest(5) İKİ çağrı → çakışmasız ~10
-// yorum (kanıtlandı). newest doğal olarak yeni şikayetleri (düşük puan) yakalar,
-// dengeli havuz sağlar (Google'da rating filtresi YOK). review_key = author_url|time.
+// yorum. newest doğal olarak yeni şikayetleri (düşük puan) yakalar, dengeli havuz
+// sağlar. review_key = author_url|time (yalnız dedup hash'inde kullanılır).
 // ----------------------------------------------------------------------------
 async function fetchGoogleDetails(
   placeId: string,
@@ -107,11 +99,9 @@ async function fetchGoogleDetails(
     ? result.reviews
         .filter((r: any) => r.author_url && r.time)
         .map((r: any) => ({
-          source: 'google' as const,
           reviewKey: `${r.author_url}|${r.time}`,
           rating: typeof r.rating === 'number' ? r.rating : null,
           text: r.text ?? null,
-          date: typeof r.time === 'number' ? new Date(r.time * 1000).toISOString() : null,
         }))
     : []
   return {
@@ -139,7 +129,7 @@ async function fetchGoogle(
     }),
   ])
 
-  // İki çağrıyı review_key ile tekilleştir (bu çağrı içinde; kalıcı dedup DB PK'da).
+  // İki çağrıyı review_key ile tekilleştir (bu çağrı içinde; kalıcı dedup hash'te).
   const byKey = new Map<string, RawReview>()
   for (const r of [...relevant.reviews, ...newest.reviews]) byKey.set(r.reviewKey, r)
 
@@ -150,138 +140,79 @@ async function fetchGoogle(
   }
 }
 
-
 // ----------------------------------------------------------------------------
-// Havuz (hotel_reviews) — UPSERT (çakışan review_key atlanır) + oku.
+// Dedup: fetched yorumların hangileri DAHA ÖNCE işlenmiş? processed_reviews'ta
+// opak hash'i olanlar atlanır (double-count önleme). Yeni olanların hash'i döner.
 // ----------------------------------------------------------------------------
-async function upsertReviewPool(hotelId: string, reviews: RawReview[]): Promise<void> {
-  if (reviews.length === 0) return
-  const rows = reviews.map((r) => ({
-    source: r.source,
-    review_key: r.reviewKey,
-    hotel_id: hotelId,
-    rating: r.rating,
-    text: r.text,
-    review_date: r.date,
-  }))
-  // ignoreDuplicates: mevcut yorumu (ve gelecekte dolacak sentiment'i) ezme.
-  const { error } = await supabaseAdmin
-    .from('hotel_reviews')
-    .upsert(rows, { onConflict: 'source,review_key', ignoreDuplicates: true })
-  if (error) console.error('hotel_reviews upsert error:', error.message)
-}
+async function partitionNewReviews(
+  hotelId: string,
+  reviews: RawReview[],
+  pepper: string
+): Promise<{ fresh: RawReview[]; freshHashes: string[] }> {
+  if (reviews.length === 0) return { fresh: [], freshHashes: [] }
+  const hashByKey = new Map<string, string>()
+  for (const r of reviews) hashByKey.set(r.reviewKey, dedupHash(pepper, r.reviewKey))
+  const allHashes = Array.from(hashByKey.values())
 
-type PoolReview = { source: string; rating: number | null; text: string | null; date: string | null }
-
-async function readReviewPool(hotelId: string): Promise<PoolReview[]> {
   const { data, error } = await supabaseAdmin
-    .from('hotel_reviews')
-    .select('source, rating, text, review_date')
+    .from('processed_reviews')
+    .select('dedup_hash')
     .eq('hotel_id', hotelId)
-    .order('review_date', { ascending: false, nullsFirst: false })
+    .in('dedup_hash', allHashes)
   if (error) {
-    console.error('hotel_reviews read error:', error.message)
-    return []
+    console.error('processed_reviews read error:', error.message)
+    // Fail-safe: emin değilsek yeni saymayıp double-count riskini önle.
+    return { fresh: [], freshHashes: [] }
   }
-  return (data ?? []).map((r) => ({ source: r.source, rating: r.rating, text: r.text, date: r.review_date }))
+  const seen = new Set<string>((data ?? []).map((r) => r.dedup_hash))
+
+  const fresh: RawReview[] = []
+  const freshHashes: string[] = []
+  for (const r of reviews) {
+    const h = hashByKey.get(r.reviewKey)!
+    if (seen.has(h)) continue
+    fresh.push(r)
+    freshHashes.push(h)
+  }
+  return { fresh, freshHashes }
 }
 
-// Puan bazlı dağılım (>=4 olumlu, <=2 olumsuz, ==3 nötr). Objektif, Gemini'siz.
-function computeDistribution(pool: PoolReview[]): ReviewDistribution {
-  let positive = 0
-  let negative = 0
-  let neutral = 0
-  for (const r of pool) {
-    if (r.rating == null) continue
-    if (r.rating >= 4) positive++
-    else if (r.rating <= 2) negative++
-    else neutral++
-  }
-  return { total: pool.length, positive, negative, neutral }
+async function markProcessed(hotelId: string, hashes: string[]): Promise<void> {
+  if (hashes.length === 0) return
+  const rows = hashes.map((h) => ({ hotel_id: hotelId, dedup_hash: h }))
+  const { error } = await supabaseAdmin
+    .from('processed_reviews')
+    .upsert(rows, { onConflict: 'hotel_id,dedup_hash', ignoreDuplicates: true })
+  if (error) console.error('processed_reviews insert error:', error.message)
 }
 
 // ----------------------------------------------------------------------------
-// ⚠️ ÇEKİRDEK: Gemini yorum analizi — birikmiş havuzun tamamı + dağılım.
+// ⚠️ ÇEKİRDEK: yeni yorumlar üzerinde TEK Gemini çağrısı (temperature:0 + seed)
+// → per-yorum kriter/aspect sentiment. Ham metin çağrıdan sonra atılır.
 // ----------------------------------------------------------------------------
-function buildCorpus(pool: PoolReview[]): string {
-  const lines: string[] = []
-  for (const r of pool.slice(0, MAX_CORPUS_REVIEWS)) {
-    if (!r.text) continue
-    const src = r.source === 'google' ? 'G' : 'T'
-    lines.push(`[${src} ${r.rating ?? '?'}/5] ${r.text.slice(0, 600)}`)
-  }
-  return lines.join('\n')
-}
+async function extractBatch(reviews: RawReview[]) {
+  const withText = reviews.filter((r): r is RawReview & { text: string } => !!r.text && r.text.trim().length > 0)
+  if (withText.length === 0) return null
 
-async function computeGeminiScores(pool: PoolReview[], dist: ReviewDistribution): Promise<GeminiScores | null> {
-  const corpus = buildCorpus(pool)
-  if (!corpus.trim()) return null
-
-  const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' })
-  const prompt = `You are a hotel review analyst. Based ONLY on the guest reviews below, score this hotel on each criterion from 0 to 10 (10 = excellent). Weigh the full set; do not let a single outlier dominate. If the reviews contain NO meaningful signal about a criterion, do NOT score it — omit its key entirely AND add its name to "insufficientSignal". Never guess and never use a neutral/middle default for an unmentioned criterion. Return ONLY valid JSON, no markdown.
-
-Review distribution (for calibration): ${dist.total} reviews analyzed — ${dist.positive} positive, ${dist.negative} negative, ${dist.neutral} neutral.
-
-Criteria:
-- safety: how safe guests feel (neighbourhood, at night, security)
-- quiet: quietness / absence of noise complaints
-- family: suitability for families (kids, space, family amenities)
-- value: value for money (price vs. quality)
-- walkability: location quality — proximity to centre, transit, walkable surroundings
-- cleanliness: cleanliness / housekeeping
-- staff: staff helpfulness and service quality
-
-Reviews:
-${corpus}
-
-Return exactly (omit any criterion with no signal from the scores, and list those names in insufficientSignal):
-{"safety":0-10,"quiet":0-10,"family":0-10,"value":0-10,"walkability":0-10,"cleanliness":0-10,"staff":0-10,"insufficientSignal":["names of criteria the reviews don't cover"],"summary":"one short sentence (max 15 words) capturing overall guest sentiment"}`
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-flash-latest',
+    generationConfig: { temperature: 0, seed: 7 } as any,
+  })
+  const prompt = buildExtractionPrompt(withText.map((r) => ({ rating: r.rating, text: r.text })))
 
   let text: string
   try {
     const result = await model.generateContent(prompt)
     text = result.response.text()
   } catch (err: any) {
-    console.error('Gemini scoring error:', err?.message || err)
+    console.error('extraction error:', err?.message || err)
     return null
   }
-
-  let parsed: any
-  try {
-    parsed = JSON.parse(text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim())
-  } catch {
-    console.error('Gemini scoring: JSON parse failed')
-    return null
-  }
-
-  // Gemini'nin "sinyal yok" dediği kriterler — skorlanmaz (5.0 default YOK).
-  const flagged = new Set<string>(
-    Array.isArray(parsed?.insufficientSignal) ? parsed.insufficientSignal.filter((x: any) => typeof x === 'string') : []
-  )
-
-  const scores: Partial<Record<ScoreCriterion, number>> = {}
-  for (const k of SCORE_CRITERIA) {
-    if (flagged.has(k)) continue // sinyal yok → atla (yanlışlıkla sayı dönse bile)
-    const v = Number(parsed?.[k])
-    if (Number.isFinite(v)) scores[k] = Math.max(0, Math.min(10, v))
-  }
-  if (Object.keys(scores).length === 0) return null
-
-  // noSignal = skorlanmayan kriterler (flagged + Gemini'nin sessizce atladıkları).
-  const noSignal = SCORE_CRITERIA.filter((k) => !(k in scores))
-
-  return {
-    scores,
-    noSignal,
-    summary: typeof parsed?.summary === 'string' ? parsed.summary : null,
-    distribution: dist,
-    poolSize: pool.length,
-  }
+  return parseExtraction(text, withText.map((r) => r.rating))
 }
 
 // ----------------------------------------------------------------------------
 // Değişken TTL: popüler otel (yorum akışı yüksek) sık, sakin otel seyrek tazelenir.
-// Kota tasarrufu + long-tail otellerde gereksiz Gemini/API çağrısını önler.
 // ----------------------------------------------------------------------------
 function ttlForTotal(totalReviewCount: number): number {
   if (totalReviewCount > 5000) return 24 * 60 * 60_000 // 1 gün
@@ -294,8 +225,9 @@ function total(google: GoogleData | null): number {
 }
 
 // ----------------------------------------------------------------------------
-// Orkestrasyon: TTL taze ise cache; bayat ise → yeni yorumları çek + havuza
-// UPSERT (biriktir) → TÜM havuzu oku → Gemini skorla → aggregate + skor yaz.
+// Orkestrasyon: TTL taze ise cache; bayat ise → yeni yorumları çek → dedup →
+// SADECE yeni olanları Gemini ile çıkar → EMA aggregate'e karıştır → skoru türet
+// → aggregate + skor yaz + hash'leri işaretle. Ham metin asla yazılmaz.
 // ----------------------------------------------------------------------------
 export async function getHotelAnalysis(
   hotelId: string,
@@ -307,7 +239,7 @@ export async function getHotelAnalysis(
 
   const { data: row, error } = await supabaseAdmin
     .from('hotel_analysis')
-    .select('google_data, gemini_scores, created_at')
+    .select('google_data, gemini_scores, signal_agg, created_at')
     .eq('hotel_id', hotelId)
     .maybeSingle()
   if (error) console.error('hotel_analysis select error:', error.message)
@@ -328,13 +260,13 @@ export async function getHotelAnalysis(
 
   const prevGoogle = (row?.google_data as GoogleData | null) ?? null
   const prevScores = (row?.gemini_scores as GeminiScores | null) ?? null
+  const prevAgg = (row?.signal_agg as SignalAgg | null) ?? null
 
   const ttl = ttlForTotal(total(prevGoogle))
   const isFresh = !!row && now - new Date(row.created_at).getTime() < ttl && !!prevScores
   if (isFresh) return pack(prevGoogle, prevScores)
 
-  // Bayat/eksik → yeni yorumları çek. Önce günlük maliyet tavanını kontrol et;
-  // dolu olan kaynak atlanır (fail-safe — diğer kaynak + havuz yine skorlar).
+  // Bayat/eksik → yeni yorumları çek. Günlük maliyet tavanı kontrolü.
   const [googleUsage, geminiUsage] = await Promise.all([
     getDailyUsage('google'),
     getDailyUsage('gemini'),
@@ -342,10 +274,8 @@ export async function getHotelAnalysis(
   const googleAllowed = googleUsage < GOOGLE_DAILY_CAP
   const geminiAllowed = geminiUsage < GEMINI_DAILY_CAP
   if (!googleAllowed) console.error(`[BUDGET] google günlük tavan dolu (${googleUsage}/${GOOGLE_DAILY_CAP}) — atlanıyor`)
-  if (!geminiAllowed) console.error(`[BUDGET] gemini günlük tavan dolu (${geminiUsage}/${GEMINI_DAILY_CAP}) — skorlama atlanıyor, cache/havuz kullanılıyor`)
+  if (!geminiAllowed) console.error(`[BUDGET] gemini günlük tavan dolu (${geminiUsage}/${GEMINI_DAILY_CAP}) — skorlama atlanıyor, cache kullanılıyor`)
 
-  // ⚠️ Tripadvisor Terra tamamen kaldırıldı (ToS: AI kullanımı + commingling +
-  // review text saklama kısıtları). Skorlama artık YALNIZ Google yorumlarıyla.
   const [gRes] = await Promise.allSettled([
     googleAllowed ? fetchGoogle(name, address) : Promise.resolve(null),
   ])
@@ -356,33 +286,54 @@ export async function getHotelAnalysis(
   // Aggregate: bu çağrı başarısızsa önceki değeri koru (totalReviewCount stabil kalsın)
   const google = gOut?.aggregate ?? prevGoogle
 
-  // Havuza biriktir (çakışan atlanır) — yalnız Google
-  const fetched = [...(gOut?.reviews ?? [])]
-  await upsertReviewPool(hotelId, fetched)
-
-  // TÜM birikmiş havuzu oku → skorla
-  const pool = await readReviewPool(hotelId)
-  if (pool.length === 0) return pack(google, prevScores) // hiç yorum yok, yazma
-
-  const dist = computeDistribution(pool)
-  // Gemini skorlama global tavana takılıysa çağrı YAPMA — eski skorları/cache'i koru
-  // (graceful). Taze skor alındıysa gerçek 1 çağrıyı say (eşik geçilince mail gider).
+  // ---- No-store skorlama akışı --------------------------------------------
   let geminiScores = prevScores
-  if (geminiAllowed) {
-    const fresh = await computeGeminiScores(pool, dist)
-    if (fresh) {
-      geminiScores = fresh
-      await recordUsage('gemini', 1, GEMINI_DAILY_CAP)
+  let aggToWrite: SignalAgg | null = prevAgg
+
+  const pepper = getPepper()
+  const fetched = gOut?.reviews ?? []
+
+  if (!pepper) {
+    console.error('[CONFIG] REVIEW_DEDUP_PEPPER tanımsız — yeni yorum işlenemez (dedup yapılamaz), cache korunuyor')
+  } else if (fetched.length > 0) {
+    const { fresh, freshHashes } = await partitionNewReviews(hotelId, fetched, pepper)
+
+    if (fresh.length > 0) {
+      if (geminiAllowed) {
+        const batch = await extractBatch(fresh)
+        if (batch) {
+          // EMA: eski katkıları sönümle → taze batch'i ekle → skoru türet.
+          const agg = prevAgg ? { ...prevAgg } : emptyAgg()
+          decayAgg(agg, now)
+          addBatch(agg, batch, now)
+          const derived = deriveScores(agg)
+          if (derived) {
+            geminiScores = derived
+            aggToWrite = agg
+            await recordUsage('gemini', 1, GEMINI_DAILY_CAP)
+            // Sadece başarılı işlemeden SONRA processed işaretle (aksi halde retry).
+            await markProcessed(hotelId, freshHashes)
+          }
+        }
+        // batch/derived null → hash'leri İŞARETLEME: bir sonraki tazelemede tekrar dene.
+      }
+      // geminiAllowed=false → yeni yorumları işaretleme, tavan açılınca işlenir.
     }
+    // fresh.length === 0 → hepsi zaten işlenmiş; skor değişmez (saf decay ratio'yu
+    // değiştirmez), cache TTL'i tazelemek için aşağıda yine de upsert edilir.
   }
+
+  // hiç veri yoksa (ilk kez, yorum yok) yazma — boş satır bırakma
+  if (!geminiScores && !google) return pack(google, prevScores)
 
   supabaseAdmin
     .from('hotel_analysis')
     .upsert({
       hotel_id: hotelId,
       google_data: google,
-      tripadvisor_data: null, // Terra kaldırıldı — mevcut satırlarda kalan TA aggregate'i tazelemede temizle
+      tripadvisor_data: null, // Terra kaldırıldı — tazelemede kalıntıyı temizle
       gemini_scores: geminiScores,
+      signal_agg: aggToWrite,
       created_at: new Date(now).toISOString(),
     })
     .then(({ error: e }) => {
