@@ -147,7 +147,13 @@ export async function POST(request: NextRequest) {
     // Nuitee geçmiş tarihe müsaitlik döndürmüyor → "No hotels found". Tarih
     // runtime'da hesaplanır (deploy'da sabitlenmez).
     const today = new Date().toISOString().slice(0, 10) // UTC YYYY-MM-DD
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' })
+    // responseMimeType:'application/json' → model'i geçerli JSON'a zorlar (fence/prose
+    // sapması yok). temperature:0+seed → varyansı kısar. Kriter-çıkarımı da (skorlama
+    // gibi) yapılandırılmış çıktıya bağımlı, "JSON parse failed" riskini kapatır.
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-flash-latest',
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, seed: 7 } as any,
+    })
     const prompt = `Extract hotel search filters from this query. Return ONLY valid JSON, no markdown, no explanation.
 
 Today's date is ${today}.
