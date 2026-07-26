@@ -241,16 +241,46 @@ Return exactly this shape (one object per review, in order; include ONLY mention
 {"reviews":[{"i":0,"c":{"cleanliness":8,"staff":9},"a":{"breakfast":7,"room_smell":2}}, ...]}`
 }
 
+// Metinden İLK dengeli {…} bloğunu ayıkla (string/escape farkında). Gemini JSON'un
+// etrafına düz metin eklerse ("Here is the JSON: {…}") kurtarmak için lenient fallback.
+function extractFirstJsonObject(s: string): string | null {
+  const start = s.indexOf('{')
+  if (start < 0) return null
+  let depth = 0, inStr = false, esc = false
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (ch === '\\') esc = true
+      else if (ch === '"') inStr = false
+    } else if (ch === '"') inStr = true
+    else if (ch === '{') depth++
+    else if (ch === '}') { depth--; if (depth === 0) return s.slice(start, i + 1) }
+  }
+  return null
+}
+
+function tryParse(raw: string): any {
+  try { return JSON.parse(raw) } catch { return undefined }
+}
+
 // Gemini yanıtını batch katkısına çevir. Ratings ayrı verilir (dağılım için).
+// hotelId sadece parse-fail teşhis logu için (hangi otel + ham yanıt kesiti).
 export function parseExtraction(
   text: string,
-  ratings: (number | null)[]
+  ratings: (number | null)[],
+  hotelId?: string
 ): BatchContribution | null {
-  let parsed: any
-  try {
-    parsed = JSON.parse(text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim())
-  } catch {
-    console.error('extraction: JSON parse failed')
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+  let parsed: any = tryParse(cleaned)
+  if (parsed === undefined) {
+    // Fallback: ilk dengeli {…} bloğunu ayıklayıp tekrar dene.
+    const block = extractFirstJsonObject(cleaned)
+    if (block) parsed = tryParse(block)
+  }
+  if (parsed === undefined) {
+    const snippet = text.slice(0, 300).replace(/\s+/g, ' ').trim()
+    console.error(`extraction: JSON parse failed hotel=${hotelId ?? '?'} raw="${snippet}"`)
     return null
   }
   const rows = Array.isArray(parsed?.reviews) ? parsed.reviews : null

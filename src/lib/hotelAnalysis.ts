@@ -190,13 +190,19 @@ async function markProcessed(hotelId: string, hashes: string[]): Promise<void> {
 // ⚠️ ÇEKİRDEK: yeni yorumlar üzerinde TEK Gemini çağrısı (temperature:0 + seed)
 // → per-yorum kriter/aspect sentiment. Ham metin çağrıdan sonra atılır.
 // ----------------------------------------------------------------------------
-async function extractBatch(reviews: RawReview[]) {
-  const withText = reviews.filter((r): r is RawReview & { text: string } => !!r.text && r.text.trim().length > 0)
-  if (withText.length === 0) return null
+// called: Gemini'den yanıt ALINDI mı (maliyet oluştu mu). parse başarısız olsa bile
+// yanıt geldiyse called=true → çağıran recordUsage sayar + created_at'i sıfırlamaz.
+type ExtractResult = { batch: ReturnType<typeof parseExtraction>; called: boolean }
 
+async function extractBatch(reviews: RawReview[], hotelId: string): Promise<ExtractResult> {
+  const withText = reviews.filter((r): r is RawReview & { text: string } => !!r.text && r.text.trim().length > 0)
+  if (withText.length === 0) return { batch: null, called: false }
+
+  // responseMimeType:'application/json' → model'i geçerli JSON'a zorlar (fence/prose
+  // sapması → "JSON parse failed" riskini neredeyse sıfırlar).
   const model = genAI.getGenerativeModel({
     model: 'gemini-flash-latest',
-    generationConfig: { temperature: 0, seed: 7 } as any,
+    generationConfig: { responseMimeType: 'application/json', temperature: 0, seed: 7 } as any,
   })
   const prompt = buildExtractionPrompt(withText.map((r) => ({ rating: r.rating, text: r.text })))
 
@@ -206,9 +212,10 @@ async function extractBatch(reviews: RawReview[]) {
     text = result.response.text()
   } catch (err: any) {
     console.error('extraction error:', err?.message || err)
-    return null
+    return { batch: null, called: false } // API hatası → yanıt yok, maliyet garanti değil
   }
-  return parseExtraction(text, withText.map((r) => r.rating))
+  // Yanıt alındı (billable). parse başarısızsa null döner ama called=true.
+  return { batch: parseExtraction(text, withText.map((r) => r.rating), hotelId), called: true }
 }
 
 // ----------------------------------------------------------------------------
@@ -289,6 +296,7 @@ export async function getHotelAnalysis(
   // ---- No-store skorlama akışı --------------------------------------------
   let geminiScores = prevScores
   let aggToWrite: SignalAgg | null = prevAgg
+  let extractionFailed = false // yanıt geldi ama parse edilemedi → created_at'i ilerletme
 
   const pepper = getPepper()
   const fetched = gOut?.reviews ?? []
@@ -298,33 +306,38 @@ export async function getHotelAnalysis(
   } else if (fetched.length > 0) {
     const { fresh, freshHashes } = await partitionNewReviews(hotelId, fetched, pepper)
 
-    if (fresh.length > 0) {
-      if (geminiAllowed) {
-        const batch = await extractBatch(fresh)
-        if (batch) {
-          // EMA: eski katkıları sönümle → taze batch'i ekle → skoru türet.
-          const agg = prevAgg ? { ...prevAgg } : emptyAgg()
-          decayAgg(agg, now)
-          addBatch(agg, batch, now)
-          const derived = deriveScores(agg)
-          if (derived) {
-            geminiScores = derived
-            aggToWrite = agg
-            await recordUsage('gemini', 1, GEMINI_DAILY_CAP)
-            // Sadece başarılı işlemeden SONRA processed işaretle (aksi halde retry).
-            await markProcessed(hotelId, freshHashes)
-          }
-        }
-        // batch/derived null → hash'leri İŞARETLEME: bir sonraki tazelemede tekrar dene.
+    if (fresh.length > 0 && geminiAllowed) {
+      const { batch, called } = await extractBatch(fresh, hotelId)
+      // Fix 4: yanıt alındıysa (parse başarısız olsa bile) maliyet oluştu → say.
+      if (called) await recordUsage('gemini', 1, GEMINI_DAILY_CAP)
+
+      if (batch) {
+        // Batch geldiyse: EMA'ya karıştır + processed işaretle HER ZAMAN (aspect-only
+        // batch'te skor türemese bile arka plan verisi birikir, yorumlar çift işlenmez).
+        const agg = prevAgg ? { ...prevAgg } : emptyAgg()
+        decayAgg(agg, now)
+        addBatch(agg, batch, now)
+        aggToWrite = agg
+        await markProcessed(hotelId, freshHashes)
+        const derived = deriveScores(agg)
+        if (derived) geminiScores = derived
+      } else if (called) {
+        // Yanıt geldi ama parse edilemedi → hash'leri İŞARETLEME (retry) + Fix 4:
+        // created_at'i ilerletme, otel bayat kalıp sonraki aramada hemen retry etsin.
+        extractionFailed = true
       }
-      // geminiAllowed=false → yeni yorumları işaretleme, tavan açılınca işlenir.
+      // called=false (metin yok / API hatası) → işaretleme, sonraki tazelemede dene.
     }
-    // fresh.length === 0 → hepsi zaten işlenmiş; skor değişmez (saf decay ratio'yu
-    // değiştirmez), cache TTL'i tazelemek için aşağıda yine de upsert edilir.
+    // fresh.length === 0 → hepsi işlenmiş; skor değişmez (saf decay ratio'yu değiştirmez),
+    // TTL'i tazelemek için aşağıda yine de upsert edilir.
   }
 
   // hiç veri yoksa (ilk kez, yorum yok) yazma — boş satır bırakma
   if (!geminiScores && !google) return pack(google, prevScores)
+
+  // Fix 4: extraction başarısızsa created_at'i İLERLETME (varsa eski değeri koru) →
+  // hotel bayat kalır, sonraki aramada retry eder (7 gün TTL beklemez).
+  const createdAt = extractionFailed && row?.created_at ? row.created_at : new Date(now).toISOString()
 
   supabaseAdmin
     .from('hotel_analysis')
@@ -334,7 +347,7 @@ export async function getHotelAnalysis(
       tripadvisor_data: null, // Terra kaldırıldı — tazelemede kalıntıyı temizle
       gemini_scores: geminiScores,
       signal_agg: aggToWrite,
-      created_at: new Date(now).toISOString(),
+      created_at: createdAt,
     })
     .then(({ error: e }) => {
       if (e) console.error('hotel_analysis upsert error:', e.message)
