@@ -230,6 +230,15 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
     /* F3: steps bölümünden önceki boş alanı kıs */
     .sky-extend{height:40px;}
     .steps-sec{padding-top:20px;}
+    /* #1: "Your search" başlığı + pill tek satırda kalsın (kelime kırılmasın);
+       flex-wrap güvenlik ağı — ikisi sığmazsa pill alt satıra iner, yatay taşma olmaz */
+    .card-head{flex-wrap:wrap;}
+    .card-head h2{white-space:nowrap;}
+    .pill{white-space:nowrap;}
+    /* #2: tarih inputlarını sola yasla (CITY/GUESTS statik metinle tutarlı).
+       iOS Safari native date kontrolünü ortalıyor; standart text-align fix'i. */
+    .field input[type=date]{text-align:left;}
+    .field input[type=date]::-webkit-datetime-edit{text-align:left;}
   }`;
 
 const BODY = `
