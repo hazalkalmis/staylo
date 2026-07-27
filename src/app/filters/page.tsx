@@ -207,7 +207,30 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
     .jr{height:auto;position:static;}.jr svg.path{display:none;}
     .tagmenu{width:min(286px,calc(100vw - 80px));}
     .pt{position:static!important;width:auto;transform:none;margin:0 auto 26px;max-width:300px;}}
-@media(max-width:520px){.nav-row{padding:12px 18px;}.nav-right{gap:11px;}.logo .w{font-size:24px;}.logo .sq{width:26px;height:26px;}.logo .o{font-size:20px;}.login{font-size:14px;white-space:nowrap;}.nav-right .btn{padding:9px 15px;font-size:13.5px;white-space:nowrap;}}`;
+@media(max-width:520px){.nav-row{padding:12px 18px;}.nav-right{gap:11px;}.logo .w{font-size:24px;}.logo .sq{width:26px;height:26px;}.logo .o{font-size:20px;}.login{font-size:14px;white-space:nowrap;}.nav-right .btn{padding:9px 15px;font-size:13.5px;white-space:nowrap;}}
+
+  /* === Mobil düzeltmeler (F1 slider tam genişlik, F2 footer yığ, F3 boşluk) === */
+  @media(max-width:520px){
+    /* F1: slider'ı tam genişlik yap — etiket+yüzde üst satır, slider alt satır tam genişlik */
+    .wlist{gap:14px;}
+    .wrow{grid-template-columns:1fr auto;grid-template-areas:"label value" "slider slider";gap:4px 12px;}
+    .wrow .wl{grid-area:label;}
+    .wrow .wv{grid-area:value;align-self:center;}
+    .wrow .slider{grid-area:slider;height:30px;}
+    /* track/fill'i büyüyen slider içinde dikey ortala */
+    .slider .trk,.slider .fill{top:50%;transform:translateY(-50%);}
+    .slider input[type=range]{height:30px;}
+    /* dokunmatik hedefi büyüt: 18px → 24px thumb */
+    .slider input[type=range]::-webkit-slider-thumb{width:24px;height:24px;}
+    .slider input[type=range]::-moz-range-thumb{width:24px;height:24px;}
+    /* F2: footer'ı yığ — tip tam genişlik üstte, iki eşit buton altta */
+    .wfoot{flex-direction:column;align-items:stretch;gap:14px;}
+    .wfoot .tip{text-align:center;}
+    .actions .btn{flex:1;text-align:center;}
+    /* F3: steps bölümünden önceki boş alanı kıs */
+    .sky-extend{height:40px;}
+    .steps-sec{padding-top:20px;}
+  }`;
 
 const BODY = `
 <!-- ===== NAV ===== -->
