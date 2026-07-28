@@ -372,7 +372,7 @@ const BODY = `
     <!-- mobile-only zengin kartlar (masaüstünde .pvm gizli) -->
     <div class="pvm">
       <article class="pvm-card">
-        <div class="pvm-thumb" style="background:linear-gradient(135deg,#bee1e6,#90e0ef)">
+        <div class="pvm-thumb" style="background:#dbeaf1 url('/demo/casa-bonay.jpg') center/cover">
           <span class="pvm-rank">#1</span>
           <span class="pvm-fav"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
         </div>
@@ -393,7 +393,7 @@ const BODY = `
         <div class="pvm-foot"><div class="pvm-price">€178<span> /night</span></div><a class="pvm-btn" href="/search">View on Booking →</a></div>
       </article>
       <article class="pvm-card">
-        <div class="pvm-thumb" style="background:linear-gradient(135deg,#cfe9f6,#a9d4e8)">
+        <div class="pvm-thumb" style="background:#dbeaf1 url('/demo/praktik-bakery.jpg') center/cover">
           <span class="pvm-rank">#2</span>
           <span class="pvm-fav"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
         </div>
@@ -414,7 +414,7 @@ const BODY = `
         <div class="pvm-foot"><div class="pvm-price">€148<span> /night</span></div><a class="pvm-btn" href="/search">View on Booking →</a></div>
       </article>
       <article class="pvm-card">
-        <div class="pvm-thumb" style="background:linear-gradient(135deg,#dfeef5,#b8dced)">
+        <div class="pvm-thumb" style="background:#dbeaf1 url('/demo/brummell.jpg') center/cover">
           <span class="pvm-rank">#3</span>
           <span class="pvm-fav"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
         </div>
