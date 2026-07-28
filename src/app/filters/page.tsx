@@ -230,15 +230,18 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
     /* F3: steps bölümünden önceki boş alanı kıs */
     .sky-extend{height:40px;}
     .steps-sec{padding-top:20px;}
-    /* #1: "Your search" başlığı + pill tek satırda kalsın (kelime kırılmasın);
-       flex-wrap güvenlik ağı — ikisi sığmazsa pill alt satıra iner, yatay taşma olmaz */
-    .card-head{flex-wrap:wrap;}
+    /* Başlık + pill her biri tek satır (kelime kırılmasın); 375px'te ikisi yan yana
+       sığmadığı için card-head'i açıkça DİKEY yığ — pill başlığın hemen altında ~8px
+       boşlukla, sola hizalı (önceki flex-wrap yerine kontrollü, sıkı boşluk). */
+    .card-head{flex-direction:column; align-items:flex-start; gap:8px;}
     .card-head h2{white-space:nowrap;}
     .pill{white-space:nowrap;}
-    /* #2: tarih inputlarını sola yasla (CITY/GUESTS statik metinle tutarlı).
-       iOS Safari native date kontrolünü ortalıyor; standart text-align fix'i. */
-    .field input[type=date]{text-align:left;}
+    /* Tarih inputlarını sola yasla (CITY/GUESTS statik metinle tutarlı).
+       Chromium/Android: datetime-edit. iOS Safari değeri ::-webkit-date-and-time-value
+       içinde tutup ORTALIYOR → appearance:none + o pseudo'ya text-align:left (agresif fix). */
+    .field input[type=date]{text-align:left; -webkit-appearance:none; appearance:none;}
     .field input[type=date]::-webkit-datetime-edit{text-align:left;}
+    .field input[type=date]::-webkit-date-and-time-value{text-align:left; margin:0;}
   }`;
 
 const BODY = `
