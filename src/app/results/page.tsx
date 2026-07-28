@@ -126,9 +126,10 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .results{margin-top:26px;display:flex;flex-direction:column;gap:18px;position:relative;z-index:3;}
   .rcard{background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;
          box-shadow:0 30px 70px -56px rgba(3,4,94,0.5);display:grid;grid-template-columns:228px 1fr 210px;
+         grid-template-areas:"thumb mid rail" "thumb mid foot";
          transition:border-color 150ms,box-shadow 150ms;}
   .rcard.highlight{border-color:var(--ocean);box-shadow:0 0 0 3px rgba(0,119,182,0.32),0 30px 70px -56px rgba(3,4,94,0.5);}
-  .rthumb{position:relative;}
+  .rthumb{grid-area:thumb;position:relative;}
   .rthumb .rthumb-ph{position:absolute;inset:0;display:block;}
   .rthumb .rank{position:absolute;top:14px;left:14px;z-index:5;width:34px;height:34px;border-radius:9px;
                 background:rgba(3,4,94,0.86);color:#fff;font-size:14px;font-weight:700;
@@ -139,7 +140,7 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rthumb .rfav:hover{transform:scale(1.08);}
   .rthumb .rfav svg{width:19px;height:19px;fill:none;stroke:var(--ink);stroke-width:2;}
   .rthumb .rfav.on svg{fill:#e0245e;stroke:#e0245e;}
-  .rmid{padding:24px 28px;display:flex;flex-direction:column;border-left:1px solid var(--border);border-right:1px solid var(--border);}
+  .rmid{grid-area:mid;padding:24px 28px;display:flex;flex-direction:column;border-left:1px solid var(--border);border-right:1px solid var(--border);}
   .rname{font-size:22px;font-weight:600;letter-spacing:-0.025em;color:var(--ink);}
   .rmeta{font-size:13px;color:var(--muted);margin-top:5px;}
   .rdist{font-size:12.5px;color:var(--ocean);font-weight:600;margin-top:8px;}
@@ -160,8 +161,11 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rib.nosig .nm{color:var(--faint);}
   .rib.nosig .vl{font-size:10.5px;font-weight:500;font-family:'Geist',sans-serif;color:var(--faint);letter-spacing:0.01em;}
 
-  .rrail{padding:24px 22px;display:flex;flex-direction:column;align-items:center;gap:13px;
-         background:linear-gradient(180deg,#f3f9fc,#e9f4fb);}
+  .rrail{grid-area:rail;padding:24px 22px 13px;display:flex;flex-direction:column;align-items:center;gap:13px;
+         background:linear-gradient(180deg,#f3f9fc,#eef6fb);}
+  .rfoot{grid-area:foot;padding:0 22px 24px;display:flex;flex-direction:column;align-items:center;gap:13px;
+         background:linear-gradient(180deg,#eef6fb,#e9f4fb);}
+  .rfoot .btn{width:100%;}
   .rbadge{width:84px;height:84px;border-radius:16px;color:#fff;display:flex;align-items:center;justify-content:center;
           font-size:33px;font-weight:700;letter-spacing:-0.03em;box-shadow:0 14px 30px -12px rgba(3,69,122,0.6);}
   .rblabel{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ocean);font-weight:700;
@@ -183,7 +187,6 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .rprice{font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-0.02em;}
   .rprice span{font-size:12px;color:var(--muted);font-weight:400;}
   .rpricesub{margin-top:2px;font-size:11.5px;color:var(--muted);font-weight:400;letter-spacing:0;}
-  .rrail .btn{width:100%;}
   /* Nuitee arzı ≠ Booking arzı: müsaitlik/fiyat farkı için beklenti notu */
   .rbooknote{margin-top:7px;font-size:11px;line-height:1.4;color:var(--muted);text-align:center;}
   /* "Searching for hotels…" loading spinner (sol tarafta dönen halka) */
@@ -192,8 +195,44 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   @keyframes rspin{to{transform:rotate(360deg);}}
   @media (prefers-reduced-motion: reduce){ .rspin{animation-duration:1.6s;} }
 
-  @media(max-width:880px){.rcard{grid-template-columns:1fr;}.rthumb{height:180px;}.rmid{border:none;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}.ribbon{flex-wrap:wrap;}.rib{flex:1 1 33%;}
-    #hotelMap{height:260px;}}
+  @media(max-width:880px){
+    /* ===== /results mobil kart yeniden düzeni (referans: Result Mobile A) ===== */
+    /* Kart tek sütun; grid yerine flex+order ile referans sırası:
+       foto → skor kartı → isim/metrik → fiyat/CTA. Masaüstü grid'i etkilenmez. */
+    .rcard{display:flex;flex-direction:column;}
+    .rthumb{order:1;height:210px;}
+    .rthumb .rank::before{content:"#";}
+    /* skor kartı: beyaz, fotoğrafın altına biner (badge sol · STAYLO FIT + kaynak sağ) */
+    .rrail{order:2;position:relative;z-index:6;margin:-44px 14px 0;padding:13px 15px;background:#fff;
+           border-radius:14px;box-shadow:0 12px 30px -14px rgba(3,4,94,0.3);
+           display:grid;grid-template-columns:auto 1fr;column-gap:14px;row-gap:0;align-items:center;}
+    .rrail .rbadge{grid-row:1 / span 2;width:58px;height:58px;border-radius:13px;font-size:23px;box-shadow:none;}
+    .rrail .rblabel{grid-column:2;grid-row:1;align-self:end;margin-bottom:2px;}
+    .rrail .rsrc{grid-column:2;grid-row:2;align-self:start;border:none;padding:0;justify-content:flex-start;}
+    .rrail .rnofit{grid-column:2;text-align:left;max-width:none;padding:0;}
+    /* orta: isim, meta, alıntı, metrik kutuları */
+    .rmid{order:3;border:none;padding:16px 18px 4px;}
+    .rname{font-size:24px;}
+    .rsumq{margin-top:12px;}
+    .ribbon{border:none;border-radius:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;}
+    .rib{flex:none;border:1px solid var(--border);border-radius:10px;padding:9px 6px 10px;
+         align-items:center;gap:3px;text-align:center;}
+    .rib .nm{justify-content:center;color:var(--muted);}
+    .rib .nm .wt{display:none;}
+    .rib .bar{display:none;}
+    .rib .vl{font-size:16px;}
+    .rib.nosig .vl{font-size:10.5px;}
+    /* alt: çizgi üstte · fiyat sol · "View on Booking" sağ · booking notu tam genişlik altta */
+    .rfoot{order:4;background:none;padding:14px 18px 18px;border-top:1px solid var(--border);
+           display:grid;grid-template-columns:1fr auto;grid-template-areas:"price cta" "note note";
+           align-items:center;column-gap:12px;row-gap:6px;}
+    .rfoot .rprice{grid-area:price;font-size:22px;}
+    .rfoot .btn{grid-area:cta;width:auto;padding:13px 20px;}
+    .rfoot .rbooknote{grid-area:note;text-align:left;margin-top:0;}
+    /* header: Adjust priorities tam genişlik */
+    .rfilters .adjust-btn{margin-left:0;flex-basis:100%;justify-content:center;padding:11px 16px;}
+    #hotelMap{height:260px;}
+  }
 
   /* card */
   .card{position:relative;z-index:3;background:#fff;border:1px solid var(--border);border-radius:18px;
@@ -705,6 +744,8 @@ export default function ResultPage() {
         <div class="rrail">
           ${badgeHtml}
           ${sources}
+        </div>
+        <div class="rfoot">
           <div class="rprice">${priceHtml}</div>
           <a class="btn" href="${esc(bookingHref)}" target="_blank" rel="nofollow sponsored noopener noreferrer">View on Booking</a>
           <div class="rbooknote">Availability &amp; final price confirmed on Booking.com</div>
