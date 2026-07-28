@@ -214,7 +214,94 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
 
   @media(max-width:880px){.pv-body,.compare,.features,.score-row{grid-template-columns:1fr;}.nav-links{display:none;}
     .jr{height:auto;position:static;}.jr svg.path{display:none;}
-    .pt{position:static!important;width:auto;transform:none;margin:0 auto 26px;max-width:300px;}}@media(max-width:520px){.nav-row{padding:12px 18px;}.nav-right{gap:11px;}.logo .w{font-size:24px;}.logo .sq{width:26px;height:26px;}.logo .o{font-size:20px;}.login{font-size:14px;white-space:nowrap;}.nav-right .btn{padding:9px 15px;font-size:13.5px;white-space:nowrap;}}`;
+    .pt{position:static!important;width:auto;transform:none;margin:0 auto 26px;max-width:300px;}}@media(max-width:520px){.nav-row{padding:12px 18px;}.nav-right{gap:11px;}.logo .w{font-size:24px;}.logo .sq{width:26px;height:26px;}.logo .o{font-size:20px;}.login{font-size:14px;white-space:nowrap;}.nav-right .btn{padding:9px 15px;font-size:13.5px;white-space:nowrap;}}
+
+  /* ================= MOBILE LANDING REDESIGN (≤880px) ================= */
+  /* A · nav — sadece logo + "Use Staylo" (referans) */
+  @media(max-width:880px){
+    .login{display:none;}
+  }
+  /* B · hero — başlık küçült, tutarlı yan boşluk, tam-genişlik butonlar, trust kartı */
+  @media(max-width:880px){
+    .wrap{padding:0 22px;}
+    .hero{padding:40px 22px 52px;}
+    h1{font-size:clamp(31px,8.4vw,42px);line-height:1.08;letter-spacing:-0.03em;max-width:none;}
+    .stamp{padding:1px 12px 6px;border-radius:6px;}
+    .hero-sub{font-size:17px;line-height:1.5;margin-top:20px;}
+    .hero-source{margin-top:10px;}
+    .hero-cta{flex-direction:column;align-items:stretch;gap:12px;margin-top:26px;}
+    .hero-cta .btn{width:100%;justify-content:center;}
+    /* trust → kenarlıklı kart: başlık + tek satır alt bilgi */
+    .trust{flex-wrap:wrap;align-items:baseline;gap:0;margin-top:24px;
+           border-radius:16px;padding:16px 18px;}
+    .trust span{padding:0;}
+    .trust span+span{border-left:none;}
+    .trust .lead{flex-basis:100%;font-size:16px;margin-bottom:5px;}
+    .trust span:not(.lead){font-size:13.5px;color:var(--body);font-weight:500;}
+    .trust span:not(.lead)+span:not(.lead)::before{content:"·";color:var(--faint);margin:0 6px;}
+  }
+  /* C · preview → zengin dikey kartlar (mobil); masaüstünde gizli, browser-mockup korunur */
+  .pvm{display:none;}
+  @media(max-width:880px){
+    .preview{display:none;}
+    .pvm{display:block;margin-top:26px;}
+    .pvm-card{background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;
+              box-shadow:0 30px 70px -56px rgba(3,4,94,0.5);margin-bottom:18px;}
+    .pvm-thumb{position:relative;height:200px;}
+    .pvm-rank{position:absolute;top:14px;left:14px;width:36px;height:36px;border-radius:9px;
+              background:rgba(3,4,94,0.86);color:#fff;font-size:14px;font-weight:700;
+              display:flex;align-items:center;justify-content:center;}
+    .pvm-fav{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;
+             background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;
+             box-shadow:0 3px 10px rgba(3,4,94,0.25);}
+    .pvm-fav svg{width:19px;height:19px;fill:none;stroke:var(--ink);stroke-width:2;}
+    .pvm-score{position:relative;z-index:6;margin:-44px 14px 0;padding:13px 15px;background:#fff;
+               border-radius:14px;box-shadow:0 12px 30px -14px rgba(3,4,94,0.3);
+               display:flex;align-items:center;gap:14px;}
+    .pvm-badge{width:58px;height:58px;border-radius:13px;color:#fff;font-size:23px;font-weight:700;
+               display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-0.03em;}
+    .pvm-fit{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ocean);font-weight:700;line-height:1.4;}
+    .pvm-fit span{display:block;font-size:12px;letter-spacing:0;text-transform:none;color:var(--muted);font-weight:400;margin-top:2px;}
+    .pvm-fit b{color:var(--ink);font-weight:600;}
+    .pvm-name{font-size:24px;font-weight:600;letter-spacing:-0.025em;color:var(--ink);padding:16px 18px 0;}
+    .pvm-meta{font-size:13px;color:var(--muted);padding:5px 18px 0;}
+    .pvm-quote{font-size:14px;color:var(--body);padding:12px 18px 0;line-height:1.5;}
+    .pvm-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:16px 18px;}
+    .pvm-m{border:1px solid var(--border);border-radius:9px;padding:8px 2px;text-align:center;
+           display:flex;flex-direction:column;gap:2px;}
+    .pvm-m span{font-size:8.5px;letter-spacing:0.03em;color:var(--muted);font-weight:600;}
+    .pvm-m b{font-size:14px;color:var(--ink);font-weight:600;font-family:ui-monospace,monospace;}
+    .pvm-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;
+              padding:14px 18px 18px;border-top:1px solid var(--border);}
+    .pvm-price{font-size:22px;font-weight:700;color:var(--ink);letter-spacing:-0.02em;white-space:nowrap;}
+    .pvm-price span{font-size:12px;color:var(--muted);font-weight:400;}
+    .pvm-btn{display:inline-flex;align-items:center;background:var(--ink);color:#fff;border-radius:11px;
+             padding:13px 18px;font-size:14.5px;font-weight:600;white-space:nowrap;}
+    .pvm-cap{text-align:center;font-size:13px;color:var(--muted);margin:4px 0 0;font-style:italic;}
+  }
+  /* D · bölüm cilası — mobilde daha sıkı boşluk + tipografi (yapısal değişiklik yok) */
+  @media(max-width:880px){
+    section.block{padding:56px 0;}
+    h2{font-size:clamp(27px,7.4vw,36px);}
+    .sec-lead{font-size:16px;margin-top:14px;}
+    .compare{margin-top:28px;}
+    .compare>div{padding:22px;}
+    .compare li{font-size:14px;}
+    .score-row{margin-top:30px;gap:26px;}
+    .score-demo{padding:22px;}
+    .features{margin-top:30px;}
+    .feature{padding:24px;}
+    .quote-block{padding:40px 24px;}
+    .quote-block .qm{font-size:60px;}
+    .faq{margin-top:28px;}
+    .cta{padding:64px 0;}
+    .cta p{font-size:16px;}
+    .cta .cl-on>div{flex-direction:column;align-items:stretch;}
+    .cta .btn{width:100%;justify-content:center;}
+    footer{padding:36px 0 30px;}
+    .footer-row{flex-direction:column;align-items:flex-start;gap:16px;}
+  }
+  /* ML-END */`;
 
 const BODY = `
 <!-- ===== NAV ===== -->
@@ -281,6 +368,73 @@ const BODY = `
           <div class="pv-row"><span class="lab">Value</span><span class="trk"><i style="width:55%"></i></span><span class="v">55</span></div>
         </aside>
       </div>
+    </div>
+    <!-- mobile-only zengin kartlar (masaüstünde .pvm gizli) -->
+    <div class="pvm">
+      <article class="pvm-card">
+        <div class="pvm-thumb" style="background:linear-gradient(135deg,#bee1e6,#90e0ef)">
+          <span class="pvm-rank">#1</span>
+          <span class="pvm-fav"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
+        </div>
+        <div class="pvm-score">
+          <div class="pvm-badge" style="background:linear-gradient(150deg,#0096c7,#03457a)">9.2</div>
+          <div class="pvm-fit">Staylo fit<span>Booking <b>8.4</b> · Google <b>4.6</b></span></div>
+        </div>
+        <div class="pvm-name">Hotel Casa Bonay</div>
+        <div class="pvm-meta">Eixample · 8-min walk · 1,842 reviews</div>
+        <div class="pvm-quote">“Quiet rooms, faultless staff, steps from everything we needed.”</div>
+        <div class="pvm-metrics">
+          <div class="pvm-m"><span>QUIET</span><b>9.1</b></div>
+          <div class="pvm-m"><span>FAMILY</span><b>8.8</b></div>
+          <div class="pvm-m"><span>WALK</span><b>9.4</b></div>
+          <div class="pvm-m"><span>CLEAN</span><b>9.6</b></div>
+          <div class="pvm-m"><span>VALUE</span><b>8.2</b></div>
+        </div>
+        <div class="pvm-foot"><div class="pvm-price">€178<span> /night</span></div><a class="pvm-btn" href="/search">View on Booking →</a></div>
+      </article>
+      <article class="pvm-card">
+        <div class="pvm-thumb" style="background:linear-gradient(135deg,#cfe9f6,#a9d4e8)">
+          <span class="pvm-rank">#2</span>
+          <span class="pvm-fav"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
+        </div>
+        <div class="pvm-score">
+          <div class="pvm-badge" style="background:linear-gradient(150deg,#00b4d8,#0077b6)">8.7</div>
+          <div class="pvm-fit">Staylo fit<span>Booking <b>8.5</b> · Google <b>4.4</b></span></div>
+        </div>
+        <div class="pvm-name">Praktik Bakery</div>
+        <div class="pvm-meta">Eixample · 12-min walk · 956 reviews</div>
+        <div class="pvm-quote">“Charming rooms, great breakfast, calm despite the busy street below.”</div>
+        <div class="pvm-metrics">
+          <div class="pvm-m"><span>QUIET</span><b>8.6</b></div>
+          <div class="pvm-m"><span>FAMILY</span><b>8.2</b></div>
+          <div class="pvm-m"><span>WALK</span><b>9.0</b></div>
+          <div class="pvm-m"><span>CLEAN</span><b>9.1</b></div>
+          <div class="pvm-m"><span>VALUE</span><b>8.8</b></div>
+        </div>
+        <div class="pvm-foot"><div class="pvm-price">€148<span> /night</span></div><a class="pvm-btn" href="/search">View on Booking →</a></div>
+      </article>
+      <article class="pvm-card">
+        <div class="pvm-thumb" style="background:linear-gradient(135deg,#dfeef5,#b8dced)">
+          <span class="pvm-rank">#3</span>
+          <span class="pvm-fav"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
+        </div>
+        <div class="pvm-score">
+          <div class="pvm-badge" style="background:linear-gradient(150deg,#48cae4,#0096c7)">7.9</div>
+          <div class="pvm-fit">Staylo fit<span>Booking <b>8.1</b> · Google <b>4.2</b></span></div>
+        </div>
+        <div class="pvm-name">Hotel Brummell</div>
+        <div class="pvm-meta">Poble-sec · 18-min walk · 612 reviews</div>
+        <div class="pvm-quote">“Rooftop pool is worth it alone; a longer walk but great value for the area.”</div>
+        <div class="pvm-metrics">
+          <div class="pvm-m"><span>QUIET</span><b>7.8</b></div>
+          <div class="pvm-m"><span>FAMILY</span><b>7.6</b></div>
+          <div class="pvm-m"><span>WALK</span><b>7.4</b></div>
+          <div class="pvm-m"><span>CLEAN</span><b>8.8</b></div>
+          <div class="pvm-m"><span>VALUE</span><b>9.0</b></div>
+        </div>
+        <div class="pvm-foot"><div class="pvm-price">€164<span> /night</span></div><a class="pvm-btn" href="/search">View on Booking →</a></div>
+      </article>
+      <p class="pvm-cap">A ranked list — this is what your search comes back with.</p>
     </div>
   </div>
 </section>
