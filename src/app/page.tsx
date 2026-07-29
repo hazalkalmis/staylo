@@ -121,6 +121,33 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Geist:wght@30
   .pv-row .trk i{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--ocean);}
   .pv-row .v{width:24px;text-align:right;font-family:ui-monospace,monospace;color:var(--body);}
 
+  /* preview → zengin foto kartları (referans); tümü .preview altında scope'lu */
+  .preview .pv-results{gap:14px;}
+  .preview .rcard{position:relative;background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 20px 44px -34px rgba(3,4,94,0.4);}
+  .preview .photo{position:relative;height:150px;background:#dbeaf1;}
+  .preview .photo img{width:100%;height:100%;object-fit:cover;display:block;}
+  .preview .photo .rank{position:absolute;top:10px;left:10px;width:28px;height:28px;border-radius:8px;background:rgba(3,4,94,0.86);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .preview .photo .heart{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.94);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(3,4,94,0.22);}
+  .preview .photo .heart svg{width:16px;height:16px;fill:none;stroke:var(--ink);stroke-width:2;}
+  .preview .fitstrap{position:relative;z-index:3;margin:-20px 15px 0;padding:9px 12px;background:#fff;border-radius:12px;box-shadow:0 10px 24px -14px rgba(3,4,94,0.3);display:flex;align-items:center;gap:10px;}
+  .preview .fitnum{flex:0 0 auto;width:38px;height:38px;border-radius:9px;color:#fff;font-size:15px;font-weight:700;letter-spacing:-0.02em;display:flex;align-items:center;justify-content:center;}
+  .preview .fitlabel{font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--ocean);font-weight:700;}
+  .preview .fitsrc{font-size:12px;color:var(--muted);margin-top:2px;}
+  .preview .fitsrc b{color:var(--ink);font-weight:600;}
+  .preview .body{padding:12px 16px 14px;}
+  .preview .body .name{font-size:17px;font-weight:600;letter-spacing:-0.02em;color:var(--ink);}
+  .preview .body .meta{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .preview .quote{font-size:13px;color:var(--body);margin:10px 0 0;line-height:1.5;}
+  .preview .body .chips{display:flex;gap:6px;margin-top:12px;}
+  .preview .fchip{flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center;}
+  .preview .fchip .l{font-size:8.5px;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .preview .fchip .v{font-size:12.5px;color:var(--ink);font-weight:600;font-family:ui-monospace,monospace;margin-top:2px;}
+  .preview .foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding-top:13px;border-top:1px solid var(--border);}
+  .preview .foot .price{font-size:17px;font-weight:700;color:var(--ink);letter-spacing:-0.02em;}
+  .preview .foot .price span{font-size:11.5px;color:var(--muted);font-weight:400;}
+  .preview .gobtn{background:var(--ink);color:#fff;border-radius:9px;padding:9px 14px;font-size:12px;font-weight:600;white-space:nowrap;}
+  .preview .gobtn:hover{background:#06075f;}
+
   section.block{position:relative;overflow:hidden;}
   .white{position:relative;overflow:hidden;}
   .cl-on{position:relative;z-index:3;}
@@ -345,18 +372,72 @@ const BODY = `
         <span class="url">staylo.app/search?q=quiet+family+hotel+barcelona</span></div>
       <div class="pv-body">
         <div class="pv-results">
-          <div class="pv-card"><div class="pv-thumb" data-l="hotel photo"></div>
-            <div><div class="pv-name">Hotel Casa Bonay</div>
-              <div class="pv-meta">Eixample · 8 min walk · 1,842 reviews · €178/night</div></div>
-            <div class="badge" style="background:#03457a">9.2</div></div>
-          <div class="pv-card"><div class="pv-thumb" data-l="hotel photo"></div>
-            <div><div class="pv-name">Praktik Bakery</div>
-              <div class="pv-meta">Eixample · 12 min walk · 956 reviews · €148/night</div></div>
-            <div class="badge" style="background:#0077b6">8.7</div></div>
-          <div class="pv-card"><div class="pv-thumb" data-l="hotel photo"></div>
-            <div><div class="pv-name">Hotel Brummell</div>
-              <div class="pv-meta">Poble-sec · 18 min walk · 612 reviews · €164/night</div></div>
-            <div class="badge" style="background:#3f9fd0">7.9</div></div>
+          <article class="rcard">
+            <div class="photo" style="background:#dbeaf1"><img src="/demo/casa-bonay.jpg" alt="Hotel Casa Bonay" loading="lazy">
+              <span class="rank">#1</span>
+              <span class="heart"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
+            </div>
+            <div class="fitstrap"><div class="fitnum" style="background:#03457a">9.2</div>
+              <div><div class="fitlabel">Staylo fit</div><div class="fitsrc">Booking <b>8.4</b> · Google <b>4.6</b></div></div>
+            </div>
+            <div class="body">
+              <div class="name">Hotel Casa Bonay</div>
+              <div class="meta">Eixample · 8-min walk · 1,842 reviews</div>
+              <p class="quote">“Quiet rooms, faultless staff, steps from everything we needed.”</p>
+              <div class="chips">
+                <div class="fchip"><div class="l">Quiet</div><div class="v">9.1</div></div>
+                <div class="fchip"><div class="l">Family</div><div class="v">8.8</div></div>
+                <div class="fchip"><div class="l">Walk</div><div class="v">9.4</div></div>
+                <div class="fchip"><div class="l">Clean</div><div class="v">9.6</div></div>
+                <div class="fchip"><div class="l">Value</div><div class="v">8.2</div></div>
+              </div>
+              <div class="foot"><div class="price">€178<span> /night</span></div><a class="gobtn" href="/search">View on Booking →</a></div>
+            </div>
+          </article>
+          <article class="rcard">
+            <div class="photo" style="background:#dbeaf1"><img src="/demo/praktik-bakery.jpg" alt="Praktik Bakery" loading="lazy">
+              <span class="rank">#2</span>
+              <span class="heart"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
+            </div>
+            <div class="fitstrap"><div class="fitnum" style="background:#0077b6">8.7</div>
+              <div><div class="fitlabel">Staylo fit</div><div class="fitsrc">Booking <b>8.5</b> · Google <b>4.4</b></div></div>
+            </div>
+            <div class="body">
+              <div class="name">Praktik Bakery</div>
+              <div class="meta">Eixample · 12-min walk · 956 reviews</div>
+              <p class="quote">“Charming rooms, great breakfast, calm despite the busy street below.”</p>
+              <div class="chips">
+                <div class="fchip"><div class="l">Quiet</div><div class="v">8.6</div></div>
+                <div class="fchip"><div class="l">Family</div><div class="v">8.2</div></div>
+                <div class="fchip"><div class="l">Walk</div><div class="v">9.0</div></div>
+                <div class="fchip"><div class="l">Clean</div><div class="v">9.1</div></div>
+                <div class="fchip"><div class="l">Value</div><div class="v">8.8</div></div>
+              </div>
+              <div class="foot"><div class="price">€148<span> /night</span></div><a class="gobtn" href="/search">View on Booking →</a></div>
+            </div>
+          </article>
+          <article class="rcard">
+            <div class="photo" style="background:#dbeaf1"><img src="/demo/brummell.jpg" alt="Hotel Brummell" loading="lazy">
+              <span class="rank">#3</span>
+              <span class="heart"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
+            </div>
+            <div class="fitstrap"><div class="fitnum" style="background:#0096c7">7.9</div>
+              <div><div class="fitlabel">Staylo fit</div><div class="fitsrc">Booking <b>8.1</b> · Google <b>4.2</b></div></div>
+            </div>
+            <div class="body">
+              <div class="name">Hotel Brummell</div>
+              <div class="meta">Poble-sec · 18-min walk · 612 reviews</div>
+              <p class="quote">“Rooftop pool is worth it alone; a longer walk but great value for the area.”</p>
+              <div class="chips">
+                <div class="fchip"><div class="l">Quiet</div><div class="v">7.8</div></div>
+                <div class="fchip"><div class="l">Family</div><div class="v">7.6</div></div>
+                <div class="fchip"><div class="l">Walk</div><div class="v">7.4</div></div>
+                <div class="fchip"><div class="l">Clean</div><div class="v">8.8</div></div>
+                <div class="fchip"><div class="l">Value</div><div class="v">9.0</div></div>
+              </div>
+              <div class="foot"><div class="price">€164<span> /night</span></div><a class="gobtn" href="/search">View on Booking →</a></div>
+            </div>
+          </article>
         </div>
         <aside class="pv-side">
           <div class="h">Why these rank</div>
